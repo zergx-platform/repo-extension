@@ -2,7 +2,7 @@ module forgejo.develop.10.199.64.20.nip.io/rucoder/repo-extension
 
 go 1.26
 
-require forgejo.develop.10.199.64.20.nip.io/rucoder/extension-sdk-go v0.1.2
+require forgejo.develop.10.199.64.20.nip.io/rucoder/extension-sdk-go v0.1.3
 
 require (
 	github.com/klauspost/compress v1.18.0 // indirect
