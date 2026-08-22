@@ -129,8 +129,18 @@ func main() {
 		panic(err)
 	}
 	defer ext.Close()
-	println("[repo-extension] registered")
-	select {}
+
+	// Minimal HTTP health endpoint for k8s readiness/liveness probes.
+	port := envOr("RUCODER_PORT", "8080")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"name":"repo-extension"}`))
+	})
+	println("[repo-extension] registered, listening :" + port + " for health")
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		panic(err)
+	}
 }
 
 func envOr(k, d string) string {
