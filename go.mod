@@ -1,4 +1,4 @@
-module forgejo.develop.10.199.64.20.nip.io/rucoder/repo-tools-go
+module forgejo.develop.10.199.64.20.nip.io/rucoder/repo-extension
 
 go 1.26
 

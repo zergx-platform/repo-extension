@@ -120,7 +120,7 @@ func qurl(base string, path string, q url.Values) string {
 func main() {
 	s := &server{base: envOr("RUCODER_REPO_MANAGER_URL", "http://rucoder-repo-manager.develop.svc.cluster.local:80")}
 	ext, err := extensionsdk.Register(extensionsdk.Config{
-		ID:      "repo-tools",
+		ID:      "repo-extension",
 		Version: "0.1.0",
 		NATSURL: envOr("NATS_URL", "nats://nats.develop.svc.cluster.local:4222"),
 		Tools:   s.tools(),
@@ -129,7 +129,7 @@ func main() {
 		panic(err)
 	}
 	defer ext.Close()
-	println("[repo-tools] registered")
+	println("[repo-extension] registered")
 	select {}
 }
 

@@ -1,6 +1,6 @@
-# repo-tools-go
+# repo-extension
 
-Go extension server (NATS) replacing the Rust `repo-tools` service. Forwards
+Go extension server (NATS) replacing the Rust `repo-tools` service (repo-extension is the NATS tool layer. Forwards
 each file/git/meta tool to the repo-manager HTTP service.
 
 ## Tools (14)
