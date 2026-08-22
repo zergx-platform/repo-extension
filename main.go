@@ -114,7 +114,7 @@ func delBody(ctx context.Context, url string, body interface{}) (map[string]inte
 }
 
 func main() {
-	s := &server{base: envOr("RUCODER_REPO_MANAGER_URL", "http://rucoder-repo-manager.develop.svc.cluster.local:80")}
+	s := &server{base: envOr("RUCODER_REPO_MANAGER_URL", "http://rucoder-repo.temp.svc.cluster.local:80")}
 	ext, err := extensionsdk.Register(extensionsdk.Config{
 		ID:      "repo-extension",
 		Version: "0.1.0",

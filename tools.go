@@ -104,6 +104,69 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				return fmt.Sprintf("Deleted file '%s'.", path), nil
 			},
 		},
+		"edit": {
+			Description: "Replace or insert lines in a file. Reads the current file, verifies its sha, applies a line edit, then writes it back with sha CAS.",
+			InputSchema: schema(map[string]interface{}{
+				"path":       str("string"),
+				"start_line": intProp(),
+				"end_line":   intProp(),
+				"content":    str("string"),
+				"message":    str("string"),
+			}, "path", "start_line", "end_line", "content"),
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, error) {
+				o, r, b := ctxBase(args)
+				path := strArg(args, "path")
+				if path == "" {
+					return "", fmt.Errorf("edit: missing 'path'")
+				}
+				startLine := intArg(args, "start_line", 0)
+				endLine := intArg(args, "end_line", 0)
+				content := strArg(args, "content")
+				message := strArg(args, "message")
+				if message == "" {
+					message = "edit " + path
+				}
+
+				// 1. read + capture sha (read-before-edit verification)
+				url := contentsPath(o, r, b, path)
+				cur, err := get(ctx, url)
+				if err != nil {
+					return "", fmt.Errorf("edit read failed: %w", err)
+				}
+				sha := strVal(cur, "sha")
+				var current string
+				if enc, _ := cur["encoding"].(string); enc == "base64" {
+					raw, derr := base64.StdEncoding.DecodeString(strVal(cur, "content"))
+					if derr != nil {
+						return "", fmt.Errorf("edit: bad base64: %w", derr)
+					}
+					current = string(raw)
+				} else {
+					current = strVal(cur, "content")
+				}
+
+				// 2. apply line edit (same semantics as original edit tool)
+				newContent, err := applyLineEdit(current, startLine, endLine, content)
+				if err != nil {
+					return "", err
+				}
+
+				// 3. write back with sha CAS
+				body := map[string]interface{}{
+					"content": base64.StdEncoding.EncodeToString([]byte(newContent)),
+					"message": message,
+					"sha":     sha,
+				}
+				v, err := put(ctx, url, body)
+				if err != nil {
+					return "", fmt.Errorf("edit write failed: %w", err)
+				}
+				if cid := strVal(v, "commit_id"); cid != "" {
+					return fmt.Sprintf("Edited file '%s'. (commit_id=%s)", path, cid), nil
+				}
+				return fmt.Sprintf("Edited file '%s'.", path), nil
+			},
+		},
 		"ls": {
 			Description: "List files in the current repo as a tree.",
 			InputSchema: schema(map[string]interface{}{}),
@@ -272,4 +335,59 @@ func pretty(v interface{}) string {
 		return fmt.Sprintf("%v", v)
 	}
 	return string(b)
+}
+
+// applyLineEdit applies a line-based insert/replace to `current`, mirroring the
+// original Rust edit tool semantics. start_line is 1-based; end_line <
+// start_line means insert before start_line.
+func applyLineEdit(current string, startLine, endLine int64, content string) (string, error) {
+	endsNewline := strings.HasSuffix(current, "\n")
+	body := strings.TrimSuffix(current, "\n")
+	var lines []string
+	if body == "" {
+		lines = nil
+	} else {
+		lines = strings.Split(body, "\n")
+	}
+	total := len(lines)
+	if startLine <= 0 {
+		return "", fmt.Errorf("edit: start_line must be >= 1")
+	}
+	if startLine > int64(total)+1 {
+		return "", fmt.Errorf("edit: start_line %d out of range (%d lines)", startLine, total)
+	}
+	if endLine < startLine {
+		// insert before start_line
+		insertAt := int(startLine - 1)
+		if insertAt > total {
+			insertAt = total
+		}
+		var result []string
+		result = append(result, lines[:insertAt]...)
+		if content != "" {
+			result = append(result, strings.Split(content, "\n")...)
+		}
+		result = append(result, lines[insertAt:]...)
+		joined := strings.Join(result, "\n")
+		if endsNewline {
+			joined += "\n"
+		}
+		return joined, nil
+	}
+	if endLine > int64(total)+1 {
+		return "", fmt.Errorf("edit: end_line %d out of range (%d lines)", endLine, total)
+	}
+	s := int(startLine - 1)
+	e := int(endLine)
+	var result []string
+	result = append(result, lines[:s]...)
+	if content != "" {
+		result = append(result, strings.Split(content, "\n")...)
+	}
+	result = append(result, lines[e:]...)
+	joined := strings.Join(result, "\n")
+	if endsNewline {
+		joined += "\n"
+	}
+	return joined, nil
 }
