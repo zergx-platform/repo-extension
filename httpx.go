@@ -10,20 +10,6 @@ import (
 
 // Raw JSON-over-HTTP helpers used by the tool forwarding layer (tools.go).
 
-func strArg(args map[string]interface{}, k string) string {
-	if v, ok := args[k].(string); ok {
-		return v
-	}
-	return ""
-}
-
-func intArg(args map[string]interface{}, k string, def int64) int64 {
-	if v, ok := args[k].(float64); ok {
-		return int64(v)
-	}
-	return def
-}
-
 func get(ctx context.Context, url string) (map[string]interface{}, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

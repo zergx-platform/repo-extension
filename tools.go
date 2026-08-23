@@ -15,11 +15,9 @@ import (
 // Each tool returns natural-language `content` (fed to the model) plus a
 // `metadata` map carrying only stable values (change_id etc).
 func (s *server) tools() map[string]extensionsdk.ToolSpec {
-	schema := func(props map[string]interface{}, req ...string) map[string]interface{} {
-		return map[string]interface{}{"type": "object", "properties": props, "required": req}
-	}
-	str := func(t string) map[string]interface{} { return map[string]interface{}{"type": t} }
-	intProp := func() map[string]interface{} { return map[string]interface{}{"type": "integer"} }
+	schema := extensionsdk.Schema
+	str := func(string) map[string]interface{} { return extensionsdk.StrProp() }
+	intProp := extensionsdk.IntProp
 
 	contentsPath := func(o, r, b, path string) string {
 		return s.base + "/api/v1/repos/" + url.PathEscape(o) + "/" + url.PathEscape(r) + "/" +
@@ -65,7 +63,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				path := strArg(args, "path")
+				path := extensionsdk.ArgString(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
 				}
@@ -73,8 +71,8 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				if err != nil {
 					return fmt.Sprintf("读取文件 '%s' 失败：文件不存在或无法访问", path), nil, nil
 				}
-				offset := intArg(args, "offset", 1)
-				limit := intArg(args, "limit", 0)
+				offset := extensionsdk.ArgInt(args, "offset", 1)
+				limit := extensionsdk.ArgInt(args, "limit", 0)
 				if offset < 1 {
 					offset = 1
 				}
@@ -136,12 +134,12 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				path := strArg(args, "path")
+				path := extensionsdk.ArgString(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
 				}
-				content := strArg(args, "content")
-				message := strArg(args, "message")
+				content := extensionsdk.ArgString(args, "content")
+				message := extensionsdk.ArgString(args, "message")
 				if message == "" {
 					message = "write " + path
 				}
@@ -171,11 +169,11 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				path := strArg(args, "path")
+				path := extensionsdk.ArgString(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
 				}
-				message := strArg(args, "message")
+				message := extensionsdk.ArgString(args, "message")
 				if message == "" {
 					message = "delete " + path
 				}
@@ -206,14 +204,14 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				path := strArg(args, "path")
+				path := extensionsdk.ArgString(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
 				}
-				startLine := intArg(args, "start_line", 0)
-				endLine := intArg(args, "end_line", 0)
-				content := strArg(args, "content")
-				message := strArg(args, "message")
+				startLine := extensionsdk.ArgInt(args, "start_line", 0)
+				endLine := extensionsdk.ArgInt(args, "end_line", 0)
+				content := extensionsdk.ArgString(args, "content")
+				message := extensionsdk.ArgString(args, "message")
 				if message == "" {
 					message = "edit " + path
 				}
@@ -311,7 +309,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				pattern := strArg(args, "pattern")
+				pattern := extensionsdk.ArgString(args, "pattern")
 				if pattern == "" {
 					return "", nil, fmt.Errorf("缺少 'pattern' 参数")
 				}
@@ -376,9 +374,9 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				revA := strArg(args, "rev_a")
-				revB := strArg(args, "rev_b")
-				path := strArg(args, "path")
+				revA := extensionsdk.ArgString(args, "rev_a")
+				revB := extensionsdk.ArgString(args, "rev_b")
+				path := extensionsdk.ArgString(args, "path")
 				q := url.Values{"rev_a": {revA}, "rev_b": {revB}, "path": {path}}
 				v, err := get(ctx, s.base+"/api/v1/git-diff/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
 				if err != nil {
@@ -399,8 +397,8 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				rev := strArg(args, "rev")
-				path := strArg(args, "path")
+				rev := extensionsdk.ArgString(args, "rev")
+				path := extensionsdk.ArgString(args, "path")
 				q := url.Values{"rev": {rev}, "path": {path}}
 				v, err := get(ctx, s.base+"/api/v1/git-blame/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
 				if err != nil {
@@ -426,7 +424,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				limit := intArg(args, "limit", 50)
+				limit := extensionsdk.ArgInt(args, "limit", 50)
 				q := url.Values{"limit": {fmt.Sprintf("%d", limit)}}
 				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/log?"+q.Encode())
 				if err != nil {
@@ -458,7 +456,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				rev := strArg(args, "rev")
+				rev := extensionsdk.ArgString(args, "rev")
 				v, err := get(ctx, s.base+"/api/v1/git-show/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(rev))
 				if err != nil {
 					return "", nil, fmt.Errorf("查看变更失败：%w", err)
@@ -503,10 +501,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 // Priority: `_session` (agent-injected session name, resolved via the
 // mapping table with lazy adoption) → legacy `_org`/`_repo`/`_branch` args.
 func (s *server) sessionBase(ctx context.Context, args map[string]interface{}) (string, string, string, error) {
-	if sid := strArg(args, "_session"); sid != "" {
+	if sid := extensionsdk.ArgString(args, "_session"); sid != "" {
 		return s.resolveSession(ctx, sid)
 	}
-	o, r, b := strArg(args, "_org"), strArg(args, "_repo"), strArg(args, "_branch")
+	o, r, b := extensionsdk.ArgString(args, "_org"), extensionsdk.ArgString(args, "_repo"), extensionsdk.ArgString(args, "_branch")
 	if o == "" || r == "" {
 		return "", "", "", fmt.Errorf("缺少会话上下文（_session 或 _org/_repo）")
 	}

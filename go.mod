@@ -3,9 +3,10 @@ module forgejo.develop.10.199.64.20.nip.io/rucoder/repo-extension
 go 1.26
 
 require (
-	forgejo.develop.10.199.64.20.nip.io/rucoder/extension-sdk-go v0.1.3
+	forgejo.develop.10.199.64.20.nip.io/rucoder/extension-sdk-go v0.1.4
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/nats-io/nats.go v1.47.0
 )
 
 require (
@@ -13,7 +14,6 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
-	github.com/nats-io/nats.go v1.47.0 // indirect
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
