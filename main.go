@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -50,30 +49,21 @@ func main() {
 
 	natsURL := envOr("NATS_URL", "nats://nats.develop.svc.cluster.local:4222")
 
-	ext, err := extensionsdk.Register(extensionsdk.Config{
-		ID:      "repo-extension",
-		Version: "0.3.0",
-		NATSURL: natsURL,
-		Tools:   s.tools(),
-	})
-	if err != nil {
-		panic(err)
-	}
-	defer ext.Close()
-
-	go runLifecycleSubscriber(ctx, s, natsURL)
-	go runReconciler(ctx, s, time.Duration(envInt("RUCODER_RECONCILE_INTERVAL_SECS", 60))*time.Second)
-
-	port := envOr("RUCODER_PORT", "8080")
-	println("[repo-extension] registered, listening :" + port + " for http")
-	srv := &http.Server{Addr: ":" + port, Handler: s.router()}
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(shutdownCtx)
-	}()
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := extensionsdk.Serve(
+		extensionsdk.Config{
+			ID:      "repo-extension",
+			Version: "0.3.1",
+			NATSURL: natsURL,
+			Tools:   s.tools(),
+		},
+		extensionsdk.ServeOptions{
+			Handler: s.router(),
+			Run: func(runCtx context.Context, _ *extensionsdk.Extension) {
+				go runLifecycleSubscriber(runCtx, s, natsURL)
+				go runReconciler(runCtx, s, time.Duration(envInt("RUCODER_RECONCILE_INTERVAL_SECS", 60))*time.Second)
+			},
+		},
+	); err != nil {
 		panic(err)
 	}
 }
