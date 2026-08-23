@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.26-alpine AS build
+# Base images default to the in-cluster artifact registry (buildkitd trusts it
+# as an insecure registry); override with --build-arg when building elsewhere.
+ARG REGISTRY=rucoder-artifact.temp.10.199.64.20.nip.io
+FROM ${REGISTRY}/golang:1.26-alpine AS build
 ARG HTTP_PROXY=http://mihomo.develop.svc.cluster.local:7890
 ARG HTTPS_PROXY=http://mihomo.develop.svc.cluster.local:7890
 ENV HTTP_PROXY=${HTTP_PROXY} \
@@ -15,7 +18,7 @@ COPY go.mod go.sum ./
 COPY *.go ./
 RUN CGO_ENABLED=0 go build -o /out/repo-extension .
 
-FROM alpine:3.24
+FROM ${REGISTRY}/alpine:3.24
 RUN apk add --no-cache ca-certificates
 COPY --from=build /out/repo-extension /usr/local/bin/repo-extension
 EXPOSE 8080
