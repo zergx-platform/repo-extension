@@ -61,7 +61,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				"limit":  intProp(),
 			}, "path"),
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
-				o, r, b := ctxBase(args)
+				o, r, b, err := s.sessionBase(ctx, args)
+				if err != nil {
+					return "", nil, err
+				}
 				path := strArg(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
@@ -129,7 +132,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 			Description: "在仓库中创建或覆盖一个文件（会自动提交为一次变更）。",
 			InputSchema: schema(map[string]interface{}{"path": str("string"), "content": str("string"), "message": str("string")}, "path", "content"),
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
-				o, r, b := ctxBase(args)
+				o, r, b, err := s.sessionBase(ctx, args)
+				if err != nil {
+					return "", nil, err
+				}
 				path := strArg(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
@@ -161,7 +167,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 			Description: "删除仓库中的一个文件（会自动提交为一次变更）。",
 			InputSchema: schema(map[string]interface{}{"path": str("string"), "message": str("string")}, "path"),
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
-				o, r, b := ctxBase(args)
+				o, r, b, err := s.sessionBase(ctx, args)
+				if err != nil {
+					return "", nil, err
+				}
 				path := strArg(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
@@ -193,7 +202,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				"message":    str("string"),
 			}, "path", "start_line", "end_line", "content"),
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
-				o, r, b := ctxBase(args)
+				o, r, b, err := s.sessionBase(ctx, args)
+				if err != nil {
+					return "", nil, err
+				}
 				path := strArg(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
@@ -261,7 +273,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 			Description: "列出仓库树中的文件与目录。",
 			InputSchema: schema(map[string]interface{}{}),
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
-				o, r, b := ctxBase(args)
+				o, r, b, err := s.sessionBase(ctx, args)
+				if err != nil {
+					return "", nil, err
+				}
 				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/tree")
 				if err != nil {
 					return "", nil, fmt.Errorf("列出目录失败：%w", err)
@@ -292,7 +307,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 			Description: "用正则表达式搜索文件内容。",
 			InputSchema: schema(map[string]interface{}{"pattern": str("string")}, "pattern"),
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
-				o, r, b := ctxBase(args)
+				o, r, b, err := s.sessionBase(ctx, args)
+				if err != nil {
+					return "", nil, err
+				}
 				pattern := strArg(args, "pattern")
 				if pattern == "" {
 					return "", nil, fmt.Errorf("缺少 'pattern' 参数")
@@ -354,7 +372,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 			Description: "比较两个版本之间的文件差异。",
 			InputSchema: schema(map[string]interface{}{"rev_a": str("string"), "rev_b": str("string"), "path": str("string")}, "rev_a", "rev_b", "path"),
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
-				o, r, _ := ctxBase(args)
+				o, r, _, err := s.sessionBase(ctx, args)
+				if err != nil {
+					return "", nil, err
+				}
 				revA := strArg(args, "rev_a")
 				revB := strArg(args, "rev_b")
 				path := strArg(args, "path")
@@ -374,7 +395,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 			Description: "标注文件每一行是由哪个变更引入的。",
 			InputSchema: schema(map[string]interface{}{"rev": str("string"), "path": str("string")}, "rev", "path"),
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
-				o, r, _ := ctxBase(args)
+				o, r, _, err := s.sessionBase(ctx, args)
+				if err != nil {
+					return "", nil, err
+				}
 				rev := strArg(args, "rev")
 				path := strArg(args, "path")
 				q := url.Values{"rev": {rev}, "path": {path}}
@@ -398,7 +422,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 			Description: "查看提交历史。",
 			InputSchema: schema(map[string]interface{}{"limit": intProp()}),
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
-				o, r, _ := ctxBase(args)
+				o, r, _, err := s.sessionBase(ctx, args)
+				if err != nil {
+					return "", nil, err
+				}
 				limit := intArg(args, "limit", 50)
 				q := url.Values{"limit": {fmt.Sprintf("%d", limit)}}
 				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/log?"+q.Encode())
@@ -427,7 +454,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 			Description: "查看某个变更改动了什么。",
 			InputSchema: schema(map[string]interface{}{"rev": str("string")}, "rev"),
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
-				o, r, _ := ctxBase(args)
+				o, r, _, err := s.sessionBase(ctx, args)
+				if err != nil {
+					return "", nil, err
+				}
 				rev := strArg(args, "rev")
 				v, err := get(ctx, s.base+"/api/v1/git-show/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(rev))
 				if err != nil {
@@ -444,7 +474,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 			Description: "列出所有分支（bookmarks）。",
 			InputSchema: schema(map[string]interface{}{}),
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
-				o, r, _ := ctxBase(args)
+				o, r, _, err := s.sessionBase(ctx, args)
+				if err != nil {
+					return "", nil, err
+				}
 				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/bookmarks")
 				if err != nil {
 					return "", nil, fmt.Errorf("列出分支失败：%w", err)
@@ -466,8 +499,18 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 	}
 }
 
-func ctxBase(args map[string]interface{}) (o, r, b string) {
-	return strArg(args, "_org"), strArg(args, "_repo"), strArg(args, "_branch")
+// sessionBase resolves the (org, repo, bookmark) triple for a tool call.
+// Priority: `_session` (agent-injected session name, resolved via the
+// mapping table with lazy adoption) → legacy `_org`/`_repo`/`_branch` args.
+func (s *server) sessionBase(ctx context.Context, args map[string]interface{}) (string, string, string, error) {
+	if sid := strArg(args, "_session"); sid != "" {
+		return s.resolveSession(ctx, sid)
+	}
+	o, r, b := strArg(args, "_org"), strArg(args, "_repo"), strArg(args, "_branch")
+	if o == "" || r == "" {
+		return "", "", "", fmt.Errorf("缺少会话上下文（_session 或 _org/_repo）")
+	}
+	return o, r, b, nil
 }
 
 func escPath(p string) string {
