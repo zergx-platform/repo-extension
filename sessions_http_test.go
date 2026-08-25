@@ -75,39 +75,41 @@ func newFakeJJ() *fakeJJ {
 		}
 		writeTestJSON(w, 200, map[string]interface{}{"ok": true})
 	})
-	mux.HandleFunc("/api/v1/repos/bookmark-from", func(w http.ResponseWriter, r *http.Request) {
-		var b map[string]interface{}
-		_ = json.NewDecoder(r.Body).Decode(&b)
-		org, _ := b["org"].(string)
-		repo, _ := b["repo"].(string)
-		src, _ := b["source_rev"].(string)
-		nb, _ := b["new_branch"].(string)
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		bms, ok := f.repos[org][repo]
-		if !ok {
-			writeTestJSON(w, 500, map[string]interface{}{"ok": false, "error": "no repo"})
-			return
-		}
-		found := src == "" // "" resolves to head
-		if !found {
-			for _, b := range bms {
-				if b == src {
-					found = true
-				}
-			}
-		}
-		if !found {
-			writeTestJSON(w, 500, map[string]interface{}{"ok": false, "error": "cannot resolve " + src})
-			return
-		}
-		f.anchor[org+"/"+repo+"/"+nb] = src
-		f.repos[org][repo] = append(bms, nb)
-		writeTestJSON(w, 200, map[string]interface{}{"ok": true, "branch": nb})
-	})
 	// DELETE /api/v1/repos/{org}/{repo}/{bm} + GET .../tree/{rev}
+	// (same "/api/v1/repos/" pattern as the bookmarks handler above, so the
+	// bookmarks branch is folded into this single handler).
 	mux.HandleFunc("/api/v1/repos/", func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/repos/"), "/")
+		if r.Method == http.MethodPost && len(parts) == 3 && parts[2] == "bookmarks" {
+			var b map[string]interface{}
+			_ = json.NewDecoder(r.Body).Decode(&b)
+			org, repo := parts[0], parts[1]
+			src, _ := b["rev"].(string)
+			nb, _ := b["branch"].(string)
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			bms, ok := f.repos[org][repo]
+			if !ok {
+				writeTestJSON(w, 500, map[string]interface{}{"ok": false, "error": "no repo"})
+				return
+			}
+			found := src == "" // "" resolves to head
+			if !found {
+				for _, b := range bms {
+					if b == src {
+						found = true
+					}
+				}
+			}
+			if !found {
+				writeTestJSON(w, 500, map[string]interface{}{"ok": false, "error": "cannot resolve " + src})
+				return
+			}
+			f.anchor[org+"/"+repo+"/"+nb] = src
+			f.repos[org][repo] = append(bms, nb)
+			writeTestJSON(w, 200, map[string]interface{}{"ok": true, "branch": nb})
+			return
+		}
 		switch {
 		case r.Method == http.MethodDelete && len(parts) == 3:
 			org, repo, bm := parts[0], parts[1], parts[2]

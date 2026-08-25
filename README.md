@@ -83,7 +83,7 @@ event-driven; there are no workspace-write endpoints.
 
 ## jj-server requirement
 
-`POST /api/v1/repos/bookmark-from` must accept `source_rev` resolving
+`POST /api/v1/repos/{org}/{repo}/bookmarks` must accept `rev` resolving
 bookmarks, commit-id prefixes, change-id prefixes, and `""` (head).
 
 ## Config

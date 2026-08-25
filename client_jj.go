@@ -158,13 +158,14 @@ func (c *jjClient) EnsureBookmark(ctx context.Context, org, repo, src, bookmark 
 	if !tree.repoExists(org, repo) {
 		return errNotFound("仓库 %s/%s 不存在", org, repo)
 	}
-	status, v, err := c.call(ctx, http.MethodPost, "/api/v1/repos/bookmark-from",
-		map[string]interface{}{"org": org, "repo": repo, "source_rev": src, "new_branch": bookmark})
+	status, v, err := c.call(ctx, http.MethodPost,
+		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/bookmarks",
+		map[string]interface{}{"rev": src, "branch": bookmark})
 	if err != nil {
 		return errDownstream("jj-server", err)
 	}
 	if status != 200 {
-		return errDownstream("jj-server", fmt.Errorf("bookmark-from %q: HTTP %d %s", src, status, errText(v)))
+		return errDownstream("jj-server", fmt.Errorf("create bookmark %q: HTTP %d %s", src, status, errText(v)))
 	}
 	return nil
 }
