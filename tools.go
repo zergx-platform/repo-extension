@@ -8,16 +8,16 @@ import (
 	"net/url"
 	"strings"
 
-	extensionsdk "forgejo.develop.10.199.64.20.nip.io/rucoder/extension-sdk-go"
+	abep "abep.dev/sdk"
 )
 
 // tools returns the repo tools, forwarding each to the jj-server Contents API.
 // Each tool returns natural-language `content` (fed to the model) plus a
 // `metadata` map carrying only stable values (change_id etc).
-func (s *server) tools() map[string]extensionsdk.ToolSpec {
-	schema := extensionsdk.Schema
-	str := func(string) map[string]interface{} { return extensionsdk.StrProp() }
-	intProp := extensionsdk.IntProp
+func (s *server) tools() map[string]abep.ToolSpec {
+	schema := abep.Schema
+	str := func(string) map[string]interface{} { return abep.StrProp() }
+	intProp := abep.IntProp
 
 	contentsPath := func(o, r, b, path string) string {
 		return s.base + "/api/v1/repos/" + url.PathEscape(o) + "/" + url.PathEscape(r) + "/" +
@@ -50,7 +50,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		return text, sha, size, nil
 	}
 
-	return map[string]extensionsdk.ToolSpec{
+	return map[string]abep.ToolSpec{
 		"read": {
 			Description: "读取仓库中的文件，返回带行号(1-based)的内容。可用 offset/limit 分段读取大文件。",
 			InputSchema: schema(map[string]interface{}{
@@ -58,12 +58,12 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				"offset": intProp(),
 				"limit":  intProp(),
 			}, "path"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
 				}
-				path := extensionsdk.ArgString(args, "path")
+				path := abep.ArgString(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
 				}
@@ -71,8 +71,8 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				if err != nil {
 					return fmt.Sprintf("读取文件 '%s' 失败：文件不存在或无法访问", path), nil, nil
 				}
-				offset := extensionsdk.ArgInt(args, "offset", 1)
-				limit := extensionsdk.ArgInt(args, "limit", 0)
+				offset := abep.ArgInt(args, "offset", 1)
+				limit := abep.ArgInt(args, "limit", 0)
 				if offset < 1 {
 					offset = 1
 				}
@@ -129,17 +129,17 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"write": {
 			Description: "在仓库中创建或覆盖一个文件（会自动提交为一次变更）。",
 			InputSchema: schema(map[string]interface{}{"path": str("string"), "content": str("string"), "message": str("string")}, "path", "content"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
 				}
-				path := extensionsdk.ArgString(args, "path")
+				path := abep.ArgString(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
 				}
-				content := extensionsdk.ArgString(args, "content")
-				message := extensionsdk.ArgString(args, "message")
+				content := abep.ArgString(args, "content")
+				message := abep.ArgString(args, "message")
 				if message == "" {
 					message = "write " + path
 				}
@@ -164,16 +164,16 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"delete": {
 			Description: "删除仓库中的一个文件（会自动提交为一次变更）。",
 			InputSchema: schema(map[string]interface{}{"path": str("string"), "message": str("string")}, "path"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
 				}
-				path := extensionsdk.ArgString(args, "path")
+				path := abep.ArgString(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
 				}
-				message := extensionsdk.ArgString(args, "message")
+				message := abep.ArgString(args, "message")
 				if message == "" {
 					message = "delete " + path
 				}
@@ -199,19 +199,19 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				"content":    str("string"),
 				"message":    str("string"),
 			}, "path", "start_line", "end_line", "content"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
 				}
-				path := extensionsdk.ArgString(args, "path")
+				path := abep.ArgString(args, "path")
 				if path == "" {
 					return "", nil, fmt.Errorf("缺少 'path' 参数")
 				}
-				startLine := extensionsdk.ArgInt(args, "start_line", 0)
-				endLine := extensionsdk.ArgInt(args, "end_line", 0)
-				content := extensionsdk.ArgString(args, "content")
-				message := extensionsdk.ArgString(args, "message")
+				startLine := abep.ArgInt(args, "start_line", 0)
+				endLine := abep.ArgInt(args, "end_line", 0)
+				content := abep.ArgString(args, "content")
+				message := abep.ArgString(args, "message")
 				if message == "" {
 					message = "edit " + path
 				}
@@ -270,7 +270,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"ls": {
 			Description: "列出仓库树中的文件与目录。",
 			InputSchema: schema(map[string]interface{}{}),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -304,12 +304,12 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"grep": {
 			Description: "用正则表达式搜索文件内容。",
 			InputSchema: schema(map[string]interface{}{"pattern": str("string")}, "pattern"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
 				}
-				pattern := extensionsdk.ArgString(args, "pattern")
+				pattern := abep.ArgString(args, "pattern")
 				if pattern == "" {
 					return "", nil, fmt.Errorf("缺少 'pattern' 参数")
 				}
@@ -339,7 +339,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"explore": {
 			Description: "浏览项目的组织结构（org/repo/分支）。",
 			InputSchema: schema(map[string]interface{}{"org": str("string"), "repo": str("string")}),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				v, err := get(ctx, s.base+"/api/v1/repos")
 				if err != nil {
 					return "", nil, fmt.Errorf("浏览结构失败：%w", err)
@@ -369,14 +369,14 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"git-diff": {
 			Description: "比较两个版本之间的文件差异。",
 			InputSchema: schema(map[string]interface{}{"rev_a": str("string"), "rev_b": str("string"), "path": str("string")}, "rev_a", "rev_b", "path"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
 				}
-				revA := extensionsdk.ArgString(args, "rev_a")
-				revB := extensionsdk.ArgString(args, "rev_b")
-				path := extensionsdk.ArgString(args, "path")
+				revA := abep.ArgString(args, "rev_a")
+				revB := abep.ArgString(args, "rev_b")
+				path := abep.ArgString(args, "path")
 				q := url.Values{"rev_a": {revA}, "rev_b": {revB}, "path": {path}}
 				v, err := get(ctx, s.base+"/api/v1/git-diff/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
 				if err != nil {
@@ -392,13 +392,13 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"git-blame": {
 			Description: "标注文件每一行是由哪个变更引入的。",
 			InputSchema: schema(map[string]interface{}{"rev": str("string"), "path": str("string")}, "rev", "path"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
 				}
-				rev := extensionsdk.ArgString(args, "rev")
-				path := extensionsdk.ArgString(args, "path")
+				rev := abep.ArgString(args, "rev")
+				path := abep.ArgString(args, "path")
 				q := url.Values{"rev": {rev}, "path": {path}}
 				v, err := get(ctx, s.base+"/api/v1/git-blame/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
 				if err != nil {
@@ -419,12 +419,12 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"git-log": {
 			Description: "查看提交历史。",
 			InputSchema: schema(map[string]interface{}{"limit": intProp()}),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
 				}
-				limit := extensionsdk.ArgInt(args, "limit", 50)
+				limit := abep.ArgInt(args, "limit", 50)
 				q := url.Values{"limit": {fmt.Sprintf("%d", limit)}}
 				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/log?"+q.Encode())
 				if err != nil {
@@ -451,12 +451,12 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"git-show": {
 			Description: "查看某个变更改动了什么。",
 			InputSchema: schema(map[string]interface{}{"rev": str("string")}, "rev"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
 				}
-				rev := extensionsdk.ArgString(args, "rev")
+				rev := abep.ArgString(args, "rev")
 				v, err := get(ctx, s.base+"/api/v1/git-show/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(rev))
 				if err != nil {
 					return "", nil, fmt.Errorf("查看变更失败：%w", err)
@@ -471,7 +471,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"git-branches": {
 			Description: "列出所有分支（bookmarks）。",
 			InputSchema: schema(map[string]interface{}{}),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -501,10 +501,10 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 // Priority: `_session` (agent-injected session name, resolved via the
 // mapping table with lazy adoption) → legacy `_org`/`_repo`/`_branch` args.
 func (s *server) sessionBase(ctx context.Context, args map[string]interface{}) (string, string, string, error) {
-	if sid := extensionsdk.ArgString(args, "_session"); sid != "" {
+	if sid := abep.ArgString(args, "_session"); sid != "" {
 		return s.resolveSession(ctx, sid)
 	}
-	o, r, b := extensionsdk.ArgString(args, "_org"), extensionsdk.ArgString(args, "_repo"), extensionsdk.ArgString(args, "_branch")
+	o, r, b := abep.ArgString(args, "_org"), abep.ArgString(args, "_repo"), abep.ArgString(args, "_branch")
 	if o == "" || r == "" {
 		return "", "", "", fmt.Errorf("缺少会话上下文（_session 或 _org/_repo）")
 	}

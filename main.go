@@ -9,7 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	extensionsdk "forgejo.develop.10.199.64.20.nip.io/rucoder/extension-sdk-go"
+	abep "abep.dev/sdk"
+	natsbus "abep.dev/sdk/nats"
 )
 
 // server wires the two faces of repo-extension:
@@ -49,17 +50,24 @@ func main() {
 
 	natsURL := envOr("NATS_URL", "nats://nats.develop.svc.cluster.local:4222")
 
-	if err := extensionsdk.Serve(
-		extensionsdk.Config{
+	nbus, err := natsbus.Connect(natsURL)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := abep.Serve(
+		nbus,
+		abep.Config{
 			ID:      "repo-extension",
 			Version: "0.3.1",
-			NATSURL: natsURL,
 			Tools:   s.tools(),
+			OnLifecycle: func(ctx context.Context, ev abep.LifecycleEvent) error {
+				return s.handleLifecycleEvent(ctx, ev.Kind, ev)
+			},
 		},
-		extensionsdk.ServeOptions{
+		abep.ServeOptions{
 			Handler: s.router(),
-			Run: func(runCtx context.Context, _ *extensionsdk.Extension) {
-				go runLifecycleSubscriber(runCtx, s, natsURL)
+			Run: func(runCtx context.Context, _ *abep.Extension) {
 				go runReconciler(runCtx, s, time.Duration(envInt("RUCODER_RECONCILE_INTERVAL_SECS", 60))*time.Second)
 			},
 		},

@@ -1,6 +1,7 @@
 package main
 
 import (
+	abep "abep.dev/sdk"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -287,7 +288,7 @@ func doReq(t *testing.T, h http.Handler, method, path string, body interface{}) 
 	return rec.Code, v
 }
 
-func (s *server) emit(t *testing.T, ctx context.Context, event string, env lifecycleEvent) error {
+func (s *server) emit(t *testing.T, ctx context.Context, event string, env abep.LifecycleEvent) error {
 	t.Helper()
 	return s.handleLifecycleEvent(ctx, event, env)
 }
@@ -301,7 +302,7 @@ func TestLifecycleCreated(t *testing.T) {
 	s := newTestServer(t, jj, ag, testStore(t))
 	ctx := context.Background()
 
-	if err := s.emit(t, ctx, "created", lifecycleEvent{Event: "created", SessionName: "acme:api:main"}); err != nil {
+	if err := s.emit(t, ctx, "created", abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:main"}); err != nil {
 		t.Fatal(err)
 	}
 	if !jj.hasRepo("acme", "api") || !jj.hasBM("acme", "api", "main") {
@@ -316,11 +317,11 @@ func TestLifecycleCreated(t *testing.T) {
 		t.Fatalf("resolveSession = %q %q %q %v", o, r, b, err)
 	}
 	// idempotent: redelivery is a no-op
-	if err := s.emit(t, ctx, "created", lifecycleEvent{Event: "created", SessionName: "acme:api:main"}); err != nil {
+	if err := s.emit(t, ctx, "created", abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:main"}); err != nil {
 		t.Fatal(err)
 	}
 	// non-derived names are dropped (permanent)
-	if err := s.emit(t, ctx, "created", lifecycleEvent{Event: "created", SessionName: "hi"}); !isPermanent(err) {
+	if err := s.emit(t, ctx, "created", abep.LifecycleEvent{Kind: "created", SessionName: "hi"}); !isPermanent(err) {
 		t.Fatalf("non-derived create should be permanent, got %v", err)
 	}
 }
@@ -332,15 +333,15 @@ func TestLifecycleForkedInheritsParentBookmark(t *testing.T) {
 	s := newTestServer(t, jj, ag, testStore(t))
 	ctx := context.Background()
 
-	mustEmit := func(ev lifecycleEvent) {
-		event := ev.Event
+	mustEmit := func(ev abep.LifecycleEvent) {
+		event := ev.Kind
 		if err := s.emit(t, ctx, event, ev); err != nil {
 			t.Fatalf("%s: %v", event, err)
 		}
 	}
-	mustEmit(lifecycleEvent{Event: "created", SessionName: "acme:api:main"})
-	mustEmit(lifecycleEvent{Event: "created", SessionName: "acme:api:dev"})
-	mustEmit(lifecycleEvent{Event: "forked", SessionName: "acme:api:feat", Parent: "acme:api:dev"})
+	mustEmit(abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:main"})
+	mustEmit(abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:dev"})
+	mustEmit(abep.LifecycleEvent{Kind: "forked", SessionName: "acme:api:feat", Parent: "acme:api:dev"})
 
 	if !jj.hasBM("acme", "api", "feat") {
 		t.Fatal("fork bookmark missing")
@@ -352,14 +353,14 @@ func TestLifecycleForkedInheritsParentBookmark(t *testing.T) {
 		t.Fatalf("fork row missing: %+v", row)
 	}
 	// idempotent redelivery
-	mustEmit(lifecycleEvent{Event: "forked", SessionName: "acme:api:feat", Parent: "acme:api:dev"})
+	mustEmit(abep.LifecycleEvent{Kind: "forked", SessionName: "acme:api:feat", Parent: "acme:api:dev"})
 	// fork from unmapped parent materializes the parent first
-	mustEmit(lifecycleEvent{Event: "forked", SessionName: "acme:api:f2", Parent: "acme:api:legacy"})
+	mustEmit(abep.LifecycleEvent{Kind: "forked", SessionName: "acme:api:f2", Parent: "acme:api:legacy"})
 	if !jj.hasBM("acme", "api", "legacy") {
 		t.Fatal("unmapped parent should be materialized first")
 	}
 	// cross-repo fork is rejected (permanent)
-	if err := s.emit(t, ctx, "forked", lifecycleEvent{Event: "forked", SessionName: "other:api:x", Parent: "acme:api:dev"}); !isPermanent(err) {
+	if err := s.emit(t, ctx, "forked", abep.LifecycleEvent{Kind: "forked", SessionName: "other:api:x", Parent: "acme:api:dev"}); !isPermanent(err) {
 		t.Fatalf("cross-repo fork should be permanent, got %v", err)
 	}
 }
@@ -371,8 +372,8 @@ func TestLifecycleRenamedDual(t *testing.T) {
 	s := newTestServer(t, jj, ag, testStore(t))
 	ctx := context.Background()
 
-	s.emit(t, ctx, "created", lifecycleEvent{Event: "created", SessionName: "acme:api:old"})
-	if err := s.emit(t, ctx, "renamed", lifecycleEvent{Event: "renamed", From: "acme:api:old", To: "acme:api:new"}); err != nil {
+	s.emit(t, ctx, "created", abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:old"})
+	if err := s.emit(t, ctx, "renamed", abep.LifecycleEvent{Kind: "renamed", From: "acme:api:old", To: "acme:api:new"}); err != nil {
 		t.Fatal(err)
 	}
 	if jj.hasBM("acme", "api", "old") || !jj.hasBM("acme", "api", "new") {
@@ -388,7 +389,7 @@ func TestLifecycleRenamedDual(t *testing.T) {
 		t.Fatal("old row must be gone")
 	}
 	// rename of never-materialized session = plain create
-	if err := s.emit(t, ctx, "renamed", lifecycleEvent{Event: "renamed", From: "acme:api:ghost", To: "acme:api:revived"}); err != nil {
+	if err := s.emit(t, ctx, "renamed", abep.LifecycleEvent{Kind: "renamed", From: "acme:api:ghost", To: "acme:api:revived"}); err != nil {
 		t.Fatal(err)
 	}
 	if !jj.hasBM("acme", "api", "revived") {
@@ -403,8 +404,8 @@ func TestLifecycleDeleted(t *testing.T) {
 	s := newTestServer(t, jj, ag, testStore(t))
 	ctx := context.Background()
 
-	s.emit(t, ctx, "created", lifecycleEvent{Event: "created", SessionName: "acme:api:tmp"})
-	if err := s.emit(t, ctx, "deleted", lifecycleEvent{Event: "deleted", SessionName: "acme:api:tmp"}); err != nil {
+	s.emit(t, ctx, "created", abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:tmp"})
+	if err := s.emit(t, ctx, "deleted", abep.LifecycleEvent{Kind: "deleted", SessionName: "acme:api:tmp"}); err != nil {
 		t.Fatal(err)
 	}
 	if jj.hasBM("acme", "api", "tmp") {
@@ -414,7 +415,7 @@ func TestLifecycleDeleted(t *testing.T) {
 		t.Fatal("row survived delete")
 	}
 	// deleting a never-materialized session is a no-op success
-	if err := s.emit(t, ctx, "deleted", lifecycleEvent{Event: "deleted", SessionName: "acme:api:never"}); err != nil {
+	if err := s.emit(t, ctx, "deleted", abep.LifecycleEvent{Kind: "deleted", SessionName: "acme:api:never"}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -426,7 +427,7 @@ func TestResolveSessionStrict(t *testing.T) {
 	s := newTestServer(t, jj, ag, testStore(t))
 	ctx := context.Background()
 
-	s.emit(t, ctx, "created", lifecycleEvent{Event: "created", SessionName: "acme:api:main"})
+	s.emit(t, ctx, "created", abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:main"})
 
 	// unmapped but well-formed → "not ready" (permanent-ish info), no creation
 	if _, _, _, err := s.resolveSession(ctx, "acme:api:pending"); err == nil {
@@ -490,7 +491,7 @@ func TestGetSessionMap(t *testing.T) {
 	h := s.router()
 	ctx := context.Background()
 
-	s.emit(t, ctx, "created", lifecycleEvent{Event: "created", SessionName: "acme:api:main"})
+	s.emit(t, ctx, "created", abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:main"})
 	code, v := doReq(t, h, "GET", "/api/v1/session-map?session=acme:api:main", nil)
 	if code != 200 || v["bookmark"] != "main" {
 		t.Fatalf("session-map = %d %v", code, v)
@@ -507,7 +508,7 @@ func TestListReposAnnotates(t *testing.T) {
 	s := newTestServer(t, jj, ag, testStore(t))
 	h := s.router()
 
-	s.emit(t, context.Background(), "created", lifecycleEvent{Event: "created", SessionName: "acme:api:main"})
+	s.emit(t, context.Background(), "created", abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:main"})
 	code, v := doReq(t, h, "GET", "/api/v1/repos", nil)
 	if code != 200 {
 		t.Fatalf("list = %d", code)
@@ -527,7 +528,7 @@ func TestReconcileConvergesDrift(t *testing.T) {
 	s := newTestServer(t, jj, ag, testStore(t))
 	ctx := context.Background()
 
-	s.emit(t, ctx, "created", lifecycleEvent{Event: "created", SessionName: "acme:api:main"})
+	s.emit(t, ctx, "created", abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:main"})
 
 	// drift 1: bookmark deleted directly in jj → row removed
 	jj.mu.Lock()
@@ -541,7 +542,7 @@ func TestReconcileConvergesDrift(t *testing.T) {
 	}
 
 	// drift 2: session deleted directly in agent → row removed, bookmark orphaned
-	s.emit(t, ctx, "created", lifecycleEvent{Event: "created", SessionName: "acme:api:bm2"})
+	s.emit(t, ctx, "created", abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:bm2"})
 	ag.mu.Lock()
 	delete(ag.sessions, "acme:api:bm2")
 	ag.mu.Unlock()
@@ -601,7 +602,7 @@ func TestReconcileBackfillAndUnmapDoNotFight(t *testing.T) {
 	ctx := context.Background()
 
 	// row exists, session gone (drift) — unmap must win over backfill paths
-	s.emit(t, ctx, "created", lifecycleEvent{Event: "created", SessionName: "acme:api:x"})
+	s.emit(t, ctx, "created", abep.LifecycleEvent{Kind: "created", SessionName: "acme:api:x"})
 	ag.mu.Lock()
 	delete(ag.sessions, "acme:api:x")
 	ag.mu.Unlock()

@@ -2,108 +2,13 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"time"
 
-	"github.com/nats-io/nats.go"
+	abep "abep.dev/sdk"
 )
-
-// Lifecycle trigger hooks: the agent publishes session lifecycle events to
-// the durable `notify.lifecycle.session.>` subjects (JetStream, stream
-// RCODER_NOTIFY); this subscriber eagerly mirrors them into jj workspaces.
-// A durable consumer with manual acks means events emitted while
-// repo-extension is down are delivered on restart.
-
-const (
-	lifecycleSubject = "notify.lifecycle.session.>"
-	lifecycleDurable = "repo-extension-lifecycle"
-)
-
-// runLifecycleSubscriber consumes lifecycle events until ctx is done,
-// reconnecting with a backoff on connection loss.
-func runLifecycleSubscriber(ctx context.Context, s *server, natsURL string) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		err := consumeLifecycle(ctx, s, natsURL)
-		if ctx.Err() != nil {
-			return
-		}
-		fmt.Printf("[repo-extension] lifecycle subscriber stopped: %v — reconnecting in 5s\n", err)
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(5 * time.Second):
-		}
-	}
-}
-
-func consumeLifecycle(ctx context.Context, s *server, natsURL string) error {
-	nc, err := nats.Connect(natsURL,
-		nats.MaxReconnects(-1), nats.ReconnectWait(2*time.Second))
-	if err != nil {
-		return err
-	}
-	defer nc.Close()
-
-	js, err := nc.JetStream(nats.PublishAsyncMaxPending(256))
-	if err != nil {
-		return err
-	}
-
-	_, err = js.Subscribe(lifecycleSubject, func(msg *nats.Msg) {
-		handleLifecycleMsg(ctx, s, msg)
-	}, nats.Durable(lifecycleDurable), nats.ManualAck(), nats.DeliverAll())
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("[repo-extension] lifecycle subscriber ready (%s)\n", lifecycleSubject)
-	<-ctx.Done()
-	nc.Close()
-	return nc.LastError()
-}
-
-// lifecycleEvent is the payload shape the agent publishes on
-// `notify.lifecycle.session.{kind}`.
-type lifecycleEvent struct {
-	Event       string `json:"event"`
-	SessionName string `json:"session_name"`
-	Parent      string `json:"parent"`
-	From        string `json:"from"`
-	To          string `json:"to"`
-}
-
-func handleLifecycleMsg(ctx context.Context, s *server, msg *nats.Msg) {
-	var env lifecycleEvent
-	if err := json.Unmarshal(msg.Data, &env); err != nil {
-		fmt.Printf("[repo-extension] lifecycle: bad payload %q: %v — discarding\n", string(msg.Data), err)
-		_ = msg.Term()
-		return
-	}
-
-	err := s.handleLifecycleEvent(ctx, env.Event, env)
-	switch {
-	case err == nil:
-		_ = msg.Ack()
-	case isPermanent(err):
-		// Can never succeed (e.g. name not workspace-derived) — drop.
-		fmt.Printf("[repo-extension] lifecycle %s: %v — discarding\n", env.Event, err)
-		_ = msg.Term()
-	default:
-		// Transient (jj/PG down) — retry with backoff via redelivery.
-		fmt.Printf("[repo-extension] lifecycle %s: %v — redelivering\n", env.Event, err)
-		_ = msg.NakWithDelay(5 * time.Second)
-	}
-}
 
 // handleLifecycleEvent mirrors one agent lifecycle event into the workspace
 // layer. Every step is idempotent: redeliveries (at-least-once) converge.
-func (s *server) handleLifecycleEvent(ctx context.Context, event string, env lifecycleEvent) error {
+func (s *server) handleLifecycleEvent(ctx context.Context, event string, env abep.LifecycleEvent) error {
 	switch event {
 	case "created":
 		org, repo, bm, ok := parseSessionName(env.SessionName)
