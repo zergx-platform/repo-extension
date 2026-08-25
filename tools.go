@@ -58,7 +58,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				"offset": intProp(),
 				"limit":  intProp(),
 			}, "path"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -129,7 +129,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"write": {
 			Description: "在仓库中创建或覆盖一个文件（会自动提交为一次变更）。",
 			InputSchema: schema(map[string]interface{}{"path": str("string"), "content": str("string"), "message": str("string")}, "path", "content"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -164,7 +164,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"delete": {
 			Description: "删除仓库中的一个文件（会自动提交为一次变更）。",
 			InputSchema: schema(map[string]interface{}{"path": str("string"), "message": str("string")}, "path"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -199,7 +199,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 				"content":    str("string"),
 				"message":    str("string"),
 			}, "path", "start_line", "end_line", "content"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -270,7 +270,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"ls": {
 			Description: "列出仓库树中的文件与目录。",
 			InputSchema: schema(map[string]interface{}{}),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -304,7 +304,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"grep": {
 			Description: "用正则表达式搜索文件内容。",
 			InputSchema: schema(map[string]interface{}{"pattern": str("string")}, "pattern"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -339,7 +339,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"explore": {
 			Description: "浏览项目的组织结构（org/repo/分支）。",
 			InputSchema: schema(map[string]interface{}{"org": str("string"), "repo": str("string")}),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				v, err := get(ctx, s.base+"/api/v1/repos")
 				if err != nil {
 					return "", nil, fmt.Errorf("浏览结构失败：%w", err)
@@ -369,7 +369,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"git-diff": {
 			Description: "比较两个版本之间的文件差异。",
 			InputSchema: schema(map[string]interface{}{"rev_a": str("string"), "rev_b": str("string"), "path": str("string")}, "rev_a", "rev_b", "path"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -392,7 +392,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"git-blame": {
 			Description: "标注文件每一行是由哪个变更引入的。",
 			InputSchema: schema(map[string]interface{}{"rev": str("string"), "path": str("string")}, "rev", "path"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -419,7 +419,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"git-log": {
 			Description: "查看提交历史。",
 			InputSchema: schema(map[string]interface{}{"limit": intProp()}),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -451,7 +451,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"git-show": {
 			Description: "查看某个变更改动了什么。",
 			InputSchema: schema(map[string]interface{}{"rev": str("string")}, "rev"),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
@@ -471,7 +471,7 @@ func (s *server) tools() map[string]extensionsdk.ToolSpec {
 		"git-branches": {
 			Description: "列出所有分支（bookmarks）。",
 			InputSchema: schema(map[string]interface{}{}),
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, _ func(string)) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args)
 				if err != nil {
 					return "", nil, err
