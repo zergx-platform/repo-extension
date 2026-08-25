@@ -3,7 +3,7 @@ module forgejo.develop.10.199.64.20.nip.io/rucoder/repo-extension
 go 1.26
 
 require (
-	forgejo.develop.10.199.64.20.nip.io/rucoder/extension-sdk-go v0.1.7
+	forgejo.develop.10.199.64.20.nip.io/rucoder/extension-sdk-go v0.1.8
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/nats-io/nats.go v1.47.0
