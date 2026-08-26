@@ -58,9 +58,15 @@ func main() {
 	if err := abep.Serve(
 		nbus,
 		abep.Config{
-			ID:      "repo-extension",
+			ID:      "repo",
 			Version: "0.3.1",
 			Tools:   s.tools(),
+			Variables: map[string]abep.VariableSpec{
+				"org":      {Scope: "session", Resolve: s.resolveOrg},
+				"repo":     {Scope: "session", Resolve: s.resolveRepo},
+				"bookmark": {Scope: "session", Resolve: s.resolveBookmark},
+			},
+			Lifecycle: []string{"created", "forked", "renamed", "deleted"},
 			OnLifecycle: func(ctx context.Context, ev abep.LifecycleEvent) error {
 				return s.handleLifecycleEvent(ctx, ev.Kind, ev)
 			},
