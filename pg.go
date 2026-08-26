@@ -42,7 +42,7 @@ type Store struct {
 // pre-provision it), then opens a pool and applies the schema DDL.
 func OpenStore(ctx context.Context, cfg PgConfig) (*Store, error) {
 	if err := ensureDatabase(ctx, cfg); err != nil {
-		fmt.Printf("[repo-extension] ensure database %q: %v (continuing; it may be pre-provisioned)\n", cfg.DB, err)
+		log.Warn("ensure database failed (continuing; it may be pre-provisioned)", "db", cfg.DB, "err", err)
 	}
 	pool, err := pgxpool.New(ctx, cfg.dsn(cfg.DB))
 	if err != nil {
@@ -84,7 +84,7 @@ func ensureDatabase(ctx context.Context, cfg PgConfig) error {
 		}
 		return err
 	}
-	fmt.Printf("[repo-extension] created database %q\n", cfg.DB)
+	log.Info("created database", "db", cfg.DB)
 	return nil
 }
 

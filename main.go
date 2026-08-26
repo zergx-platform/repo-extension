@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strconv"
@@ -31,6 +32,7 @@ type server struct {
 }
 
 func main() {
+	log := slog.Default().With("svc", "repo-extension")
 	s := &server{
 		base:  envOr("RUCODER_REPO_MANAGER_URL", "http://rucoder-repo.temp.svc.cluster.local:80"),
 		agent: envOr("RUCODER_AGENT_URL", "http://rucoder-agent.temp.svc.cluster.local:80"),
@@ -44,7 +46,8 @@ func main() {
 
 	store, err := OpenStore(ctx, pgConfig())
 	if err != nil {
-		panic(err)
+		log.Error("pg connect failed", "err", err)
+		os.Exit(1)
 	}
 	s.store = store
 	defer store.Close()
@@ -53,7 +56,8 @@ func main() {
 
 	nbus, err := natsbus.Connect(natsURL)
 	if err != nil {
-		panic(err)
+		log.Error("nats connect failed", "err", err)
+		os.Exit(1)
 	}
 
 	if err := abep.Serve(
@@ -76,11 +80,13 @@ func main() {
 			Handler: s.router(),
 			Run: func(runCtx context.Context, ext *abep.Extension) {
 				s.ext = ext
+				log.Info("listening", "port", envOr("RUCODER_PORT", "8080"), "nats", natsURL)
 				go runReconciler(runCtx, s, time.Duration(envInt("RUCODER_RECONCILE_INTERVAL_SECS", 60))*time.Second)
 			},
 		},
 	); err != nil {
-		panic(err)
+		log.Error("serve failed", "err", err)
+		os.Exit(1)
 	}
 }
 

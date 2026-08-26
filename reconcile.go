@@ -30,7 +30,7 @@ func runReconciler(ctx context.Context, s *server, interval time.Duration) {
 			return
 		case <-ticker.C:
 			if err := reconcileOnce(ctx, s); err != nil {
-				fmt.Printf("[repo-extension] reconcile: %v\n", err)
+				log.Error("reconcile failed", "err", err)
 			}
 		}
 	}
@@ -78,8 +78,8 @@ func convergeDrift(ctx context.Context, s *server, sessions map[string]bool) err
 			bound[row.Bookmark] = true
 			switch {
 			case !bms[row.Bookmark]:
-				fmt.Printf("[repo-extension] reconcile: bookmark %s/%s#%s gone — unmapping session %s\n",
-					row.Org, row.Repo, row.Bookmark, row.SessionName)
+				log.Warn("reconcile: bookmark gone — unmapping session",
+					"org", row.Org, "repo", row.Repo, "bookmark", row.Bookmark, "session", row.SessionName)
 				if err := s.store.DeleteRow(ctx, row.Org, row.Repo, row.Bookmark); err != nil {
 					return errDownstream("postgres", err)
 				}
@@ -87,8 +87,8 @@ func convergeDrift(ctx context.Context, s *server, sessions map[string]bool) err
 			case !sessions[row.SessionName]:
 				// Session gone: the bookmark becomes a legal orphan (work
 				// preserved; adoptable by a same-name session later).
-				fmt.Printf("[repo-extension] reconcile: session %s gone — unmapping %s/%s#%s (bookmark becomes orphan)\n",
-					row.SessionName, row.Org, row.Repo, row.Bookmark)
+				log.Warn("reconcile: session gone — unmapping (bookmark becomes orphan)",
+					"session", row.SessionName, "org", row.Org, "repo", row.Repo, "bookmark", row.Bookmark)
 				if err := s.store.DeleteRow(ctx, row.Org, row.Repo, row.Bookmark); err != nil {
 					return errDownstream("postgres", err)
 				}
@@ -97,8 +97,8 @@ func convergeDrift(ctx context.Context, s *server, sessions map[string]bool) err
 		}
 		for bm := range bms {
 			if !bound[bm] {
-				fmt.Printf("[repo-extension] reconcile: orphan bookmark %s/%s#%s (adoptable via ops endpoint)\n",
-					m.Org, m.Repo, bm)
+				log.Info("reconcile: orphan bookmark (adoptable via ops endpoint)",
+					"org", m.Org, "repo", m.Repo, "bookmark", bm)
 			}
 		}
 	}
@@ -128,7 +128,7 @@ func backfillWorkspaces(ctx context.Context, s *server, sessions map[string]bool
 		if !ok {
 			continue // non-workspace session (e.g. "hi") — not our contract
 		}
-		fmt.Printf("[repo-extension] reconcile: session %s has no workspace — backfilling\n", name)
+		log.Info("reconcile: session has no workspace — backfilling", "session", name)
 		if err := s.ensureCreated(ctx, org, repo, bm, name); err != nil {
 			if isPermanent(err) {
 				continue
