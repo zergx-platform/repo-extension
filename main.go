@@ -27,6 +27,7 @@ type server struct {
 	cache *sessCache
 	jj    *jjClient
 	ag    *agentClient
+	ext   *abep.Extension
 }
 
 func main() {
@@ -73,7 +74,8 @@ func main() {
 		},
 		abep.ServeOptions{
 			Handler: s.router(),
-			Run: func(runCtx context.Context, _ *abep.Extension) {
+			Run: func(runCtx context.Context, ext *abep.Extension) {
+				s.ext = ext
 				go runReconciler(runCtx, s, time.Duration(envInt("RUCODER_RECONCILE_INTERVAL_SECS", 60))*time.Second)
 			},
 		},

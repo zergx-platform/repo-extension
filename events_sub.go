@@ -9,26 +9,43 @@ import (
 // handleLifecycleEvent mirrors one agent lifecycle event into the workspace
 // layer. Every step is idempotent: redeliveries (at-least-once) converge.
 func (s *server) handleLifecycleEvent(ctx context.Context, event string, env abep.LifecycleEvent) error {
+	var err error
 	switch event {
 	case "created":
 		org, repo, bm, ok := parseSessionName(env.SessionName)
 		if !ok {
 			return errBad("session %q 不符合 org:repo:bookmark 命名 — 忽略", env.SessionName)
 		}
-		return s.ensureCreated(ctx, org, repo, bm, env.SessionName)
+		err = s.ensureCreated(ctx, org, repo, bm, env.SessionName)
 	case "forked":
 		org, repo, bm, ok := parseSessionName(env.SessionName)
 		if !ok {
 			return errBad("session %q 不符合 org:repo:bookmark 命名 — 忽略", env.SessionName)
 		}
-		return s.ensureForked(ctx, org, repo, bm, env.SessionName, env.Parent)
+		err = s.ensureForked(ctx, org, repo, bm, env.SessionName, env.Parent)
 	case "renamed":
-		return s.ensureRenamed(ctx, env.From, env.To)
+		err = s.ensureRenamed(ctx, env.From, env.To)
 	case "deleted":
-		return s.ensureDeleted(ctx, env.SessionName)
+		err = s.ensureDeleted(ctx, env.SessionName)
 	default:
 		return errBad("unknown lifecycle event %q — ignoring", event)
 	}
+	if err != nil {
+		return err
+	}
+
+	// Project the workspace mapping into the shared var KV (single-source-of-
+	// truth = our PG; KV = recomputable projection). `deleted` clears instead.
+	if event == "deleted" {
+		s.clearSessionVars(ctx, s.ext, env.SessionName)
+		return nil
+	}
+	sid := env.SessionName
+	if event == "forked" || event == "renamed" {
+		sid = env.To
+	}
+	s.publishSessionVars(ctx, s.ext, sid)
+	return nil
 }
 
 // ensureCreated: repo + bookmark from `main` (head fallback) + mapping row.
