@@ -7,102 +7,148 @@ lifecycle: [created, forked, renamed, deleted]
 variables:
   - name: org
     scope: session
-    description: 当前工作区所属组织（session 变量，来自映射表）
+    description: Organization of the current workspace (session variable, from the mapping table).
   - name: repo
     scope: session
-    description: 当前工作区仓库名（session 变量，来自映射表）
+    description: Repository name of the current workspace (session variable, from the mapping table).
   - name: bookmark
     scope: session
-    description: 当前工作区分支/书签名（session 变量，来自映射表）
+    description: Branch/bookmark of the current workspace (session variable, from the mapping table).
 tools:
   - name: read
-    description: 读取仓库中的文件，返回带行号(1-based)的内容。可用 offset/limit 分段读取大文件。
+    description: Read a file from the repository, returning line-numbered (1-based) content. Use offset/limit to read large files in segments.
     input_schema:
       type: object
       properties:
-        path: { type: string }
-        offset: { type: integer }
-        limit: { type: integer }
+        path:
+          type: string
+          description: File path to read (relative to the repository root).
+        offset:
+          type: integer
+          description: Starting line number (1-based, default 1).
+        limit:
+          type: integer
+          description: Maximum number of lines to read (0/omitted = read to end of file).
       required: [path]
   - name: write
-    description: 在仓库中创建或覆盖一个文件（会自动提交为一次变更）。
+    description: Create or overwrite a file in the repository (committed as one change).
     input_schema:
       type: object
       properties:
-        path: { type: string }
-        content: { type: string }
-        message: { type: string }
+        path:
+          type: string
+          description: File path to create/overwrite (relative to the repository root).
+        content:
+          type: string
+          description: Full file content.
+        message:
+          type: string
+          description: Commit message (defaults to "write <path>").
       required: [path, content]
   - name: delete
-    description: 删除仓库中的一个文件（会自动提交为一次变更）。
+    description: Delete a file from the repository (committed as one change).
     input_schema:
       type: object
       properties:
-        path: { type: string }
-        message: { type: string }
+        path:
+          type: string
+          description: File path to delete (relative to the repository root).
+        message:
+          type: string
+          description: Commit message (defaults to "delete <path>").
       required: [path]
   - name: edit
-    description: 按行号替换或插入文件内容。先读取校验当前文件，应用行编辑，再写回（带 sha 校验，防止覆盖他人修改）。
+    description: Replace or insert file content by line number. Reads and validates the current file first, applies the line edit, then writes back with sha verification to prevent clobbering concurrent edits.
     input_schema:
       type: object
       properties:
-        path: { type: string }
-        start_line: { type: integer }
-        end_line: { type: integer }
-        content: { type: string }
-        message: { type: string }
+        path:
+          type: string
+          description: File path to edit (relative to the repository root).
+        start_line:
+          type: integer
+          description: Start line (1-based); when end_line < start_line, inserts before start_line.
+        end_line:
+          type: integer
+          description: End line (1-based, inclusive); less than start_line means insert mode.
+        content:
+          type: string
+          description: Replacement or inserted content.
+        message:
+          type: string
+          description: Commit message (defaults to "edit <path>").
       required: [path, start_line, end_line, content]
   - name: ls
-    description: 列出仓库树中的文件与目录。
+    description: List files and directories in the repository tree.
     input_schema:
       type: object
       properties: {}
   - name: grep
-    description: 用正则表达式搜索文件内容。
+    description: Search file contents with a regular expression.
     input_schema:
       type: object
       properties:
-        pattern: { type: string }
+        pattern:
+          type: string
+          description: Regular expression to search file contents.
       required: [pattern]
   - name: explore
-    description: 浏览项目的组织结构（org/repo/分支）。
+    description: Browse the organization/repository/branch structure.
     input_schema:
       type: object
       properties:
-        org: { type: string }
-        repo: { type: string }
+        org:
+          type: string
+          description: Organization name (omitted = list all organizations).
+        repo:
+          type: string
+          description: Repository name (omitted = list all repositories in the org).
   - name: git-diff
-    description: 比较两个版本之间的文件差异。
+    description: Compare file differences between two revisions.
     input_schema:
       type: object
       properties:
-        rev_a: { type: string }
-        rev_b: { type: string }
-        path: { type: string }
+        rev_a:
+          type: string
+          description: Start revision (change ID or bookmark).
+        rev_b:
+          type: string
+          description: End revision (change ID or bookmark).
+        path:
+          type: string
+          description: File path to diff.
       required: [rev_a, rev_b, path]
   - name: git-blame
-    description: 标注文件每一行是由哪个变更引入的。
+    description: Annotate each line of a file with the change that introduced it.
     input_schema:
       type: object
       properties:
-        rev: { type: string }
-        path: { type: string }
+        rev:
+          type: string
+          description: Revision to trace (change ID or bookmark; defaults to the branch head).
+        path:
+          type: string
+          description: File path to trace.
       required: [rev, path]
   - name: git-log
-    description: 查看提交历史。
+    description: View commit history.
     input_schema:
       type: object
       properties:
-        limit: { type: integer }
+        limit:
+          type: integer
+          description: Maximum number of commits to return (default 50).
   - name: git-show
-    description: 查看某个变更改动了什么。
+    description: View what a change modified.
     input_schema:
       type: object
       properties:
-        rev: { type: string }
+        rev:
+          type: string
+          description: Change ID.
       required: [rev]
   - name: git-branches
-    description: 列出所有分支（bookmarks）。
+    description: List all branches (bookmarks).
     input_schema:
       type: object
       properties: {}

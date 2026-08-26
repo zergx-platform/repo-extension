@@ -21,10 +21,12 @@ RUN apk add --no-cache git \
 WORKDIR /build
 COPY go.mod go.sum ./
 COPY *.go ./
+COPY manifest.yaml ./
 RUN CGO_ENABLED=0 go build -o /out/repo-extension .
 
 FROM ${REGISTRY}/alpine:3.24
 RUN apk add --no-cache ca-certificates
 COPY --from=build /out/repo-extension /usr/local/bin/repo-extension
+COPY --from=build /build/manifest.yaml /manifest.yaml
 EXPOSE 8080
 ENTRYPOINT ["repo-extension"]
