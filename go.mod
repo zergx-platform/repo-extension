@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	abep.dev/sdk v0.2.4
-	abep.dev/sdk/nats v0.1.3
+	abep.dev/sdk/nats v0.2.0
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/jackc/pgx/v5 v5.10.0
 )
