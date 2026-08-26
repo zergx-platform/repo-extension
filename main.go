@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -13,6 +14,9 @@ import (
 	abep "abep.dev/sdk"
 	natsbus "abep.dev/sdk/nats"
 )
+
+//go:embed manifest.yaml
+var manifestYaml []byte
 
 // server wires the two faces of repo-extension:
 //
@@ -60,7 +64,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	manifest, err := abep.LoadManifest("manifest.yaml")
+	manifest, err := abep.ParseManifest(manifestYaml)
 	if err != nil {
 		log.Error("load manifest failed", "err", err)
 		os.Exit(1)
