@@ -146,7 +146,7 @@ func TestExploreWire(t *testing.T) {
 	defer agent.Close()
 
 	res, err := agent.CallTool(context.Background(), "", "repo", "explore", "x1",
-		map[string]interface{}{}, func(string) {})
+		map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("explore wire: %v", err)
 	}

@@ -3,8 +3,8 @@ module forgejo.develop.10.199.64.20.nip.io/rucoder/repo-extension
 go 1.26
 
 require (
-	abep.dev/sdk v0.2.7
-	abep.dev/sdk/nats v0.2.1
+	abep.dev/sdk v0.2.8
+	abep.dev/sdk/nats v0.2.2
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/jackc/pgx/v5 v5.10.0
 )

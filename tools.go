@@ -49,7 +49,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 
 	return map[string]abep.ToolSpec{
 		"read": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
@@ -118,7 +118,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			},
 		},
 		"write": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
@@ -151,7 +151,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			},
 		},
 		"delete": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
@@ -178,7 +178,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			},
 		},
 		"edit": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
@@ -247,7 +247,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			},
 		},
 		"ls": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
@@ -279,7 +279,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			},
 		},
 		"grep": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				o, r, b, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
@@ -312,7 +312,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			},
 		},
 		"explore": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				v, err := get(ctx, s.base+"/api/v1/repos")
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to browse structure: %w", err)
@@ -340,7 +340,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			},
 		},
 		"git-diff": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
@@ -361,7 +361,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			},
 		},
 		"git-blame": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
@@ -386,7 +386,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			},
 		},
 		"git-log": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
@@ -416,7 +416,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			},
 		},
 		"git-show": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
@@ -434,7 +434,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			},
 		},
 		"git-branches": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
 				o, r, _, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
