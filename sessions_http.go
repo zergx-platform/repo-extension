@@ -66,9 +66,9 @@ func (s *server) resolveSession(ctx context.Context, sid string) (string, string
 	}
 	if row == nil {
 		if _, _, _, ok := parseSessionName(sid); !ok {
-			return "", "", "", errBad("会话 '%s' 不符合 org:repo:bookmark 命名，无法解析工作区", sid)
+			return "", "", "", errBad("session '%s' does not match org:repo:bookmark naming; cannot resolve workspace", sid)
 		}
-		return "", "", "", errNotFound("会话 '%s' 的工作区尚未就绪（生命周期事件处理中），请稍后重试", sid)
+		return "", "", "", errNotFound("session '%s' workspace is not ready yet (lifecycle event in progress); retry later", sid)
 	}
 	s.cache.put(sid, row.Org, row.Repo, row.Bookmark)
 	return row.Org, row.Repo, row.Bookmark, nil
@@ -101,10 +101,10 @@ func (s *server) completeAdopt(ctx context.Context, org, repo, bookmark string) 
 		return "", false, err
 	}
 	if !tree.repoExists(org, repo) {
-		return "", false, errNotFound("仓库 %s/%s 不存在", org, repo)
+		return "", false, errNotFound("repository %s/%s does not exist", org, repo)
 	}
 	if !tree.bookmarkExists(org, repo, bookmark) {
-		return "", false, errNotFound("分支 %s/%s#%s 不存在", org, repo, bookmark)
+		return "", false, errNotFound("bookmark %s/%s#%s does not exist", org, repo, bookmark)
 	}
 	name := sessionName(org, repo, bookmark)
 	if err := s.ag.EnsureSession(ctx, name); err != nil {
@@ -191,7 +191,7 @@ func (s *server) listBookmarks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !tree.repoExists(org, repo) {
-		writeErr(w, errNotFound("仓库 %s/%s 不存在", org, repo))
+		writeErr(w, errNotFound("repository %s/%s does not exist", org, repo))
 		return
 	}
 	rows, err := s.store.ListRowsForRepo(ctx, org, repo)
@@ -220,7 +220,7 @@ func (s *server) ensureSession(w http.ResponseWriter, r *http.Request) {
 	org, repo, bm := chi.URLParam(r, "org"), chi.URLParam(r, "repo"), chi.URLParam(r, "bm")
 	if !validComponent(bm) {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"ok": false, "error": "bookmark 名称非法，无法派生会话"})
+			"ok": false, "error": "invalid bookmark name; cannot derive session"})
 		return
 	}
 	name, adopted, err := s.completeAdopt(r.Context(), org, repo, bm)
@@ -237,7 +237,7 @@ func (s *server) ensureSession(w http.ResponseWriter, r *http.Request) {
 func (s *server) getSessionMap(w http.ResponseWriter, r *http.Request) {
 	sid := r.URL.Query().Get("session")
 	if sid == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "session 必填"})
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"ok": false, "error": "session is required"})
 		return
 	}
 	row, err := s.store.GetRowBySession(r.Context(), sid)
@@ -246,7 +246,7 @@ func (s *server) getSessionMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if row == nil {
-		writeErr(w, errNotFound("会话 %s 无映射记录", sid))
+		writeErr(w, errNotFound("session %s has no mapping row", sid))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{

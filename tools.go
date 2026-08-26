@@ -33,7 +33,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 		if enc == "base64" {
 			raw, derr := base64.StdEncoding.DecodeString(rawContent)
 			if derr != nil {
-				return "", "", 0, fmt.Errorf("文件内容 base64 解码失败")
+				return "", "", 0, fmt.Errorf("failed to base64-decode file content")
 			}
 			text = string(raw)
 		} else {
@@ -56,11 +56,11 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				path := abep.ArgString(args, "path")
 				if path == "" {
-					return "", nil, fmt.Errorf("缺少 'path' 参数")
+					return "", nil, fmt.Errorf("missing 'path' argument")
 				}
 				text, sha, size, err := readFileRaw(ctx, o, r, b, path)
 				if err != nil {
-					return fmt.Sprintf("读取文件 '%s' 失败：文件不存在或无法访问", path), nil, nil
+					return fmt.Sprintf("failed to read file '%s': not found or inaccessible", path), nil, nil
 				}
 				offset := abep.ArgInt(args, "offset", 1)
 				limit := abep.ArgInt(args, "limit", 0)
@@ -78,7 +78,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				startIdx := offset - 1
 				if startIdx > int64(len(lines)) {
 					// offset beyond EOF
-					return fmt.Sprintf("文件 '%s' 共 %d 行，offset=%d 已超出文件末尾。", path, totalLines, offset), map[string]interface{}{
+					return fmt.Sprintf("file '%s' has %d lines; offset=%d is past the end.", path, totalLines, offset), map[string]interface{}{
 						"path": path, "sha": sha, "size": size, "total_lines": totalLines, "truncated": false,
 					}, nil
 				}
@@ -100,7 +100,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				content := sb.String()
 				nextOffset := endIdx + 1
 				if truncated {
-					fmt.Fprintf(&sb, "\n（文件未读完：当前显示第 %d-%d 行，共 %d 行。请用 offset=%d 继续读取后续内容）\n", startIdx+1, endIdx, totalLines, nextOffset)
+					fmt.Fprintf(&sb, "\n(file not fully read: showing lines %d-%d of %d; continue with offset=%d)\n", startIdx+1, endIdx, totalLines, nextOffset)
 					content = sb.String()
 				}
 
@@ -125,7 +125,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				path := abep.ArgString(args, "path")
 				if path == "" {
-					return "", nil, fmt.Errorf("缺少 'path' 参数")
+					return "", nil, fmt.Errorf("missing 'path' argument")
 				}
 				content := abep.ArgString(args, "content")
 				message := abep.ArgString(args, "message")
@@ -138,14 +138,14 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				v, err := put(ctx, contentsPath(o, r, b, path), body)
 				if err != nil {
-					return "", nil, fmt.Errorf("写入文件失败：%w", err)
+					return "", nil, fmt.Errorf("failed to write file: %w", err)
 				}
 				changeID := strVal(v, "change_id")
 				if changeID == "" {
 					// fall back to commit_id for older backend
 					changeID = strVal(v, "commit_id")
 				}
-				return fmt.Sprintf("已写入文件 '%s'（变更 %s）", path, shortID(changeID)), map[string]interface{}{
+				return fmt.Sprintf("wrote file '%s' (change %s)", path, shortID(changeID)), map[string]interface{}{
 					"path": path, "change_id": changeID,
 				}, nil
 			},
@@ -158,7 +158,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				path := abep.ArgString(args, "path")
 				if path == "" {
-					return "", nil, fmt.Errorf("缺少 'path' 参数")
+					return "", nil, fmt.Errorf("missing 'path' argument")
 				}
 				message := abep.ArgString(args, "message")
 				if message == "" {
@@ -166,13 +166,13 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				v, err := delBody(ctx, contentsPath(o, r, b, path), map[string]interface{}{"message": message})
 				if err != nil {
-					return "", nil, fmt.Errorf("删除文件失败：%w", err)
+					return "", nil, fmt.Errorf("failed to delete file: %w", err)
 				}
 				changeID := strVal(v, "change_id")
 				if changeID == "" {
 					changeID = strVal(v, "commit_id")
 				}
-				return fmt.Sprintf("已删除文件 '%s'（变更 %s）", path, shortID(changeID)), map[string]interface{}{
+				return fmt.Sprintf("deleted file '%s' (change %s)", path, shortID(changeID)), map[string]interface{}{
 					"path": path, "change_id": changeID,
 				}, nil
 			},
@@ -185,7 +185,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				path := abep.ArgString(args, "path")
 				if path == "" {
-					return "", nil, fmt.Errorf("缺少 'path' 参数")
+					return "", nil, fmt.Errorf("missing 'path' argument")
 				}
 				startLine := abep.ArgInt(args, "start_line", 0)
 				endLine := abep.ArgInt(args, "end_line", 0)
@@ -195,18 +195,18 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 					message = "edit " + path
 				}
 
-				// 1. read + capture sha (read-before-edit 校验)
+				// 1. read + capture sha (read-before-edit check)
 				url := contentsPath(o, r, b, path)
 				cur, err := get(ctx, url)
 				if err != nil {
-					return "", nil, fmt.Errorf("读取文件 '%s' 失败：文件不存在或无法访问", path)
+					return "", nil, fmt.Errorf("failed to read file '%s': not found or inaccessible", path)
 				}
 				sha := strVal(cur, "sha")
 				var current string
 				if enc, _ := cur["encoding"].(string); enc == "base64" {
 					raw, derr := base64.StdEncoding.DecodeString(strVal(cur, "content"))
 					if derr != nil {
-						return "", nil, fmt.Errorf("文件内容 base64 解码失败")
+						return "", nil, fmt.Errorf("failed to base64-decode file content")
 					}
 					current = string(raw)
 				} else {
@@ -227,7 +227,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				v, err := put(ctx, url, body)
 				if err != nil {
-					return "", nil, fmt.Errorf("写入编辑结果失败：%w", err)
+					return "", nil, fmt.Errorf("failed to write edited result: %w", err)
 				}
 				changeID := strVal(v, "change_id")
 				if changeID == "" {
@@ -236,11 +236,11 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 
 				var desc string
 				if endLine < startLine {
-					desc = fmt.Sprintf("在第 %d 行前插入了 %d 行", startLine, countLines(content))
+					desc = fmt.Sprintf("inserted %d line(s) before line %d", startLine, countLines(content))
 				} else {
-					desc = fmt.Sprintf("替换了第 %d-%d 行", startLine, endLine)
+					desc = fmt.Sprintf("replaced lines %d-%d", startLine, endLine)
 				}
-				return fmt.Sprintf("已编辑文件 '%s'：%s（变更 %s）", path, desc, shortID(changeID)), map[string]interface{}{
+				return fmt.Sprintf("edited file '%s': %s (change %s)", path, desc, shortID(changeID)), map[string]interface{}{
 					"path": path, "start_line": startLine, "end_line": endLine,
 					"old_sha": sha, "change_id": changeID,
 				}, nil
@@ -254,7 +254,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/tree")
 				if err != nil {
-					return "", nil, fmt.Errorf("列出目录失败：%w", err)
+					return "", nil, fmt.Errorf("failed to list directory: %w", err)
 				}
 				entries := toEntries(v)
 				dirs := 0
@@ -267,10 +267,10 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 					}
 				}
 				var sb strings.Builder
-				fmt.Fprintf(&sb, "当前分支 '%s' 共 %d 项（%d 个目录、%d 个文件）：\n", b, len(entries), dirs, files)
+				fmt.Fprintf(&sb, "branch '%s' has %d entries (%d dirs, %d files):\n", b, len(entries), dirs, files)
 				for _, e := range entries {
 					if e.isDir {
-						fmt.Fprintf(&sb, "  [目录] %s/\n", e.path)
+						fmt.Fprintf(&sb, "  [dir] %s/\n", e.path)
 					} else {
 						fmt.Fprintf(&sb, "  %s\n", e.path)
 					}
@@ -286,19 +286,19 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				pattern := abep.ArgString(args, "pattern")
 				if pattern == "" {
-					return "", nil, fmt.Errorf("缺少 'pattern' 参数")
+					return "", nil, fmt.Errorf("missing 'pattern' argument")
 				}
 				q := url.Values{"pattern": {pattern}}
 				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/search?"+q.Encode())
 				if err != nil {
-					return "", nil, fmt.Errorf("搜索失败：%w", err)
+					return "", nil, fmt.Errorf("search failed: %w", err)
 				}
 				matches := strSlice(v, "matches")
 				if len(matches) == 0 {
-					return fmt.Sprintf("在 '%s' 分支没有找到匹配 '%s' 的内容。", b, pattern), map[string]interface{}{"matches": []interface{}{}, "count": 0}, nil
+					return fmt.Sprintf("no matches for '%s' in branch '%s'.", b, pattern), map[string]interface{}{"matches": []interface{}{}, "count": 0}, nil
 				}
 				var sb strings.Builder
-				fmt.Fprintf(&sb, "找到 %d 处匹配：\n", len(matches))
+				fmt.Fprintf(&sb, "found %d match(es):\n", len(matches))
 				for _, m := range matches {
 					fmt.Fprintf(&sb, "  %s\n", m)
 				}
@@ -315,17 +315,17 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string, _ func(string)) (string, map[string]interface{}, error) {
 				v, err := get(ctx, s.base+"/api/v1/repos")
 				if err != nil {
-					return "", nil, fmt.Errorf("浏览结构失败：%w", err)
+					return "", nil, fmt.Errorf("failed to browse structure: %w", err)
 				}
 				orgs := toOrgs(v)
 				var sb strings.Builder
 				if len(orgs) == 0 {
-					return "当前没有任何组织或仓库。", map[string]interface{}{"orgs": []interface{}{}}, nil
+					return "no organizations or repositories.", map[string]interface{}{"orgs": []interface{}{}}, nil
 				}
 				for _, o := range orgs {
-					fmt.Fprintf(&sb, "组织 '%s'（%d 个仓库）：\n", o.org, len(o.repos))
+					fmt.Fprintf(&sb, "organization '%s' (%d repo(s)):\n", o.org, len(o.repos))
 					for _, r := range o.repos {
-						fmt.Fprintf(&sb, "  - %s（分支：%s）\n", r.repo, strings.Join(r.branches, ", "))
+						fmt.Fprintf(&sb, "  - %s (branches: %s)\n", r.repo, strings.Join(r.branches, ", "))
 					}
 				}
 				meta := make([]interface{}, 0, len(orgs))
@@ -351,13 +351,13 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				q := url.Values{"rev_a": {revA}, "rev_b": {revB}, "path": {path}}
 				v, err := get(ctx, s.base+"/api/v1/git-diff/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
 				if err != nil {
-					return "", nil, fmt.Errorf("获取差异失败：%w", err)
+					return "", nil, fmt.Errorf("failed to get diff: %w", err)
 				}
 				diff := strVal(v, "diff")
 				if strings.TrimSpace(diff) == "" {
-					return fmt.Sprintf("文件 '%s' 在 '%s' 和 '%s' 之间没有差异。", path, revA, revB), map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}, nil
+					return fmt.Sprintf("file '%s' has no diff between '%s' and '%s'.", path, revA, revB), map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}, nil
 				}
-				return fmt.Sprintf("文件 '%s' 在 '%s'..'%s' 的差异：\n%s", path, revA, revB, diff), map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}, nil
+				return fmt.Sprintf("diff of file '%s' between '%s'..'%s':\n%s", path, revA, revB, diff), map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}, nil
 			},
 		},
 		"git-blame": {
@@ -371,11 +371,11 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				q := url.Values{"rev": {rev}, "path": {path}}
 				v, err := get(ctx, s.base+"/api/v1/git-blame/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
 				if err != nil {
-					return "", nil, fmt.Errorf("获取 blame 失败：%w", err)
+					return "", nil, fmt.Errorf("failed to get blame: %w", err)
 				}
 				lines := strSlice(v, "blame")
 				var sb strings.Builder
-				fmt.Fprintf(&sb, "文件 '%s' 的逐行来源：\n", path)
+				fmt.Fprintf(&sb, "per-line origin of file '%s':\n", path)
 				meta := make([]interface{}, 0, len(lines))
 				for _, line := range lines {
 					commit, text := splitBlame(line)
@@ -395,19 +395,19 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				q := url.Values{"limit": {fmt.Sprintf("%d", limit)}}
 				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/log?"+q.Encode())
 				if err != nil {
-					return "", nil, fmt.Errorf("获取提交历史失败：%w", err)
+					return "", nil, fmt.Errorf("failed to get commit history: %w", err)
 				}
 				commits := toCommits(v)
 				var sb strings.Builder
 				if len(commits) == 0 {
-					return "当前没有提交记录。", map[string]interface{}{"commits": []interface{}{}}, nil
+					return "no commits.", map[string]interface{}{"commits": []interface{}{}}, nil
 				}
-				fmt.Fprintf(&sb, "最近的 %d 条提交：\n", len(commits))
+				fmt.Fprintf(&sb, "latest %d commit(s):\n", len(commits))
 				meta := make([]interface{}, 0, len(commits))
 				for _, c := range commits {
 					msg := c.message
 					if msg == "" {
-						msg = "(无描述)"
+						msg = "(no description)"
 					}
 					fmt.Fprintf(&sb, "  %s %s（%s）\n", shortID(c.changeID), msg, c.author)
 					meta = append(meta, map[string]interface{}{"change_id": c.changeID, "message": c.message, "author": c.author, "timestamp": c.timestamp})
@@ -424,13 +424,13 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				rev := abep.ArgString(args, "rev")
 				v, err := get(ctx, s.base+"/api/v1/git-show/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(rev))
 				if err != nil {
-					return "", nil, fmt.Errorf("查看变更失败：%w", err)
+					return "", nil, fmt.Errorf("failed to view change: %w", err)
 				}
 				patch := strVal(v, "patch")
 				if strings.TrimSpace(patch) == "" {
-					return fmt.Sprintf("变更 '%s' 没有内容差异。", rev), map[string]interface{}{"rev": rev}, nil
+					return fmt.Sprintf("change '%s' has no content diff.", rev), map[string]interface{}{"rev": rev}, nil
 				}
-				return fmt.Sprintf("变更 '%s' 的改动：\n%s", rev, patch), map[string]interface{}{"rev": rev, "patch": patch}, nil
+				return fmt.Sprintf("changes of '%s':\n%s", rev, patch), map[string]interface{}{"rev": rev, "patch": patch}, nil
 			},
 		},
 		"git-branches": {
@@ -441,14 +441,14 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/bookmarks")
 				if err != nil {
-					return "", nil, fmt.Errorf("列出分支失败：%w", err)
+					return "", nil, fmt.Errorf("failed to list branches: %w", err)
 				}
 				branches := toBranches(v)
 				var sb strings.Builder
 				if len(branches) == 0 {
-					return "当前没有分支。", map[string]interface{}{"branches": []interface{}{}}, nil
+					return "no branches.", map[string]interface{}{"branches": []interface{}{}}, nil
 				}
-				fmt.Fprintf(&sb, "分支列表（%d 个）：\n", len(branches))
+				fmt.Fprintf(&sb, "branches (%d):\n", len(branches))
 				meta := make([]interface{}, 0, len(branches))
 				for _, br := range branches {
 					fmt.Fprintf(&sb, "  %s（%s）\n", br.branch, shortID(br.target))
@@ -461,19 +461,15 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 }
 
 // sessionBase resolves the (org, repo, bookmark) triple for a tool call.
-// Priority: `_session` (agent-injected session name, resolved via the
-// mapping table with lazy adoption) → the first-class `session_name` envelope
-// field → legacy `_org`/`_repo`/`_branch` args.
+// Priority: the first-class `session_name` envelope field (resolved via the
+// mapping table) → legacy `_org`/`_repo`/`_branch` args.
 func (s *server) sessionBase(ctx context.Context, args map[string]interface{}, sessionName string) (string, string, string, error) {
-	if sid := abep.ArgString(args, "_session"); sid != "" {
-		return s.resolveSession(ctx, sid)
-	}
 	if sessionName != "" {
 		return s.resolveSession(ctx, sessionName)
 	}
 	o, r, b := abep.ArgString(args, "_org"), abep.ArgString(args, "_repo"), abep.ArgString(args, "_branch")
 	if o == "" || r == "" {
-		return "", "", "", fmt.Errorf("缺少会话上下文（_session 或 _org/_repo）")
+		return "", "", "", fmt.Errorf("missing session context (session_name or _org/_repo)")
 	}
 	return o, r, b, nil
 }
@@ -710,10 +706,10 @@ func applyLineEdit(current string, startLine, endLine int64, content string) (st
 	}
 	total := len(lines)
 	if startLine <= 0 {
-		return "", fmt.Errorf("start_line 必须 >= 1")
+		return "", fmt.Errorf("start_line must be >= 1")
 	}
 	if startLine > int64(total)+1 {
-		return "", fmt.Errorf("start_line=%d 超出范围（文件共 %d 行）", startLine, total)
+		return "", fmt.Errorf("start_line=%d out of range (file has %d lines)", startLine, total)
 	}
 	if endLine < startLine {
 		insertAt := int(startLine - 1)
@@ -733,7 +729,7 @@ func applyLineEdit(current string, startLine, endLine int64, content string) (st
 		return joined, nil
 	}
 	if endLine > int64(total)+1 {
-		return "", fmt.Errorf("end_line=%d 超出范围（文件共 %d 行）", endLine, total)
+		return "", fmt.Errorf("end_line=%d out of range (file has %d lines)", endLine, total)
 	}
 	s := int(startLine - 1)
 	e := int(endLine)

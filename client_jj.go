@@ -156,7 +156,7 @@ func (c *jjClient) EnsureBookmark(ctx context.Context, org, repo, src, bookmark 
 		return nil
 	}
 	if !tree.repoExists(org, repo) {
-		return errNotFound("仓库 %s/%s 不存在", org, repo)
+		return errNotFound("repository %s/%s does not exist", org, repo)
 	}
 	status, v, err := c.call(ctx, http.MethodPost,
 		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/bookmarks",

@@ -188,7 +188,7 @@ func (s *Store) InsertRow(ctx context.Context, org, repo, bookmark, sessionName 
 		`INSERT INTO session_repos (org, repo, bookmark, session_name) VALUES ($1, $2, $3, $4)`,
 		org, repo, bookmark, sessionName)
 	if isUniqueViolation(err) {
-		return errConflict("bookmark 或 session 已绑定")
+		return errConflict("bookmark or session already bound")
 	}
 	return err
 }
@@ -201,12 +201,12 @@ func (s *Store) RenameRow(ctx context.Context, org, repo, fromBM, toBM, toSessio
 		org, repo, fromBM, toBM, toSession)
 	if err != nil {
 		if isUniqueViolation(err) {
-			return errConflict("目标 bookmark 或 session 已绑定")
+			return errConflict("target bookmark or session already bound")
 		}
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return errNotFound("映射记录不存在")
+		return errNotFound("mapping row not found")
 	}
 	return nil
 }

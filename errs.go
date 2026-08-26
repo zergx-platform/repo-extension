@@ -30,7 +30,7 @@ func errBad(format string, args ...interface{}) error {
 }
 
 func errDownstream(what string, err error) error {
-	return &opError{status: 502, msg: fmt.Sprintf("%s 不可用：%v", what, err)}
+	return &opError{status: 502, msg: fmt.Sprintf("%s unavailable: %v", what, err)}
 }
 
 // statusOf maps an error to its HTTP status (default 502 transient).

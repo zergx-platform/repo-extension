@@ -14,13 +14,13 @@ func (s *server) handleLifecycleEvent(ctx context.Context, event string, env abe
 	case "created":
 		org, repo, bm, ok := parseSessionName(env.SessionName)
 		if !ok {
-			return errBad("session %q 不符合 org:repo:bookmark 命名 — 忽略", env.SessionName)
+			return errBad("session %q does not match org:repo:bookmark naming — ignoring", env.SessionName)
 		}
 		err = s.ensureCreated(ctx, org, repo, bm, env.SessionName)
 	case "forked":
 		org, repo, bm, ok := parseSessionName(env.SessionName)
 		if !ok {
-			return errBad("session %q 不符合 org:repo:bookmark 命名 — 忽略", env.SessionName)
+			return errBad("session %q does not match org:repo:bookmark naming — ignoring", env.SessionName)
 		}
 		err = s.ensureForked(ctx, org, repo, bm, env.SessionName, env.Parent)
 	case "renamed":
@@ -82,7 +82,7 @@ func (s *server) ensureForked(ctx context.Context, org, repo, bm, sid, parentSid
 	var parentBM string
 	if pOrg, pRepo, pBM, ok := parseSessionName(parentSid); ok {
 		if pOrg != org || pRepo != repo {
-			return errBad("fork 跨仓库（%s → %s/%s）— 不支持", parentSid, org, repo)
+			return errBad("fork across repositories (%s → %s/%s) — unsupported", parentSid, org, repo)
 		}
 		parentBM = pBM
 		if prow, err := s.store.GetRow(ctx, org, repo, pBM); err != nil {
@@ -107,14 +107,14 @@ func (s *server) ensureForked(ctx context.Context, org, repo, bm, sid, parentSid
 func (s *server) ensureRenamed(ctx context.Context, fromSid, toSid string) error {
 	fromOrg, fromRepo, fromBM, ok := parseSessionName(fromSid)
 	if !ok {
-		return errBad("session %q 不符合命名 — 忽略 rename", fromSid)
+		return errBad("session %q does not match naming — ignoring rename", fromSid)
 	}
 	toOrg, toRepo, toBM, ok := parseSessionName(toSid)
 	if !ok {
-		return errBad("session %q 不符合命名 — 忽略 rename", toSid)
+		return errBad("session %q does not match naming — ignoring rename", toSid)
 	}
 	if fromOrg != toOrg || fromRepo != toRepo {
-		return errBad("rename 跨仓库（%s → %s）— 不支持", fromSid, toSid)
+		return errBad("rename across repositories (%s → %s) — unsupported", fromSid, toSid)
 	}
 
 	row, err := s.store.GetRow(ctx, fromOrg, fromRepo, fromBM)
@@ -143,7 +143,7 @@ func (s *server) ensureRenamed(ctx context.Context, fromSid, toSid string) error
 func (s *server) ensureDeleted(ctx context.Context, sid string) error {
 	org, repo, bm, ok := parseSessionName(sid)
 	if !ok {
-		return errBad("session %q 不符合命名 — 忽略 delete", sid)
+		return errBad("session %q does not match naming — ignoring delete", sid)
 	}
 	row, err := s.store.GetRowBySession(ctx, sid)
 	if err != nil {
