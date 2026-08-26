@@ -60,22 +60,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	manifest, err := abep.LoadManifest("manifest.yaml")
+	if err != nil {
+		log.Error("load manifest failed", "err", err)
+		os.Exit(1)
+	}
+
 	if err := abep.Serve(
 		nbus,
-		abep.Config{
-			ID:      "repo",
-			Version: "0.3.1",
-			Tools:   s.tools(),
-			Variables: map[string]abep.VariableSpec{
-				"org":      {Scope: "session", Resolve: s.resolveOrg},
-				"repo":     {Scope: "session", Resolve: s.resolveRepo},
-				"bookmark": {Scope: "session", Resolve: s.resolveBookmark},
+		manifest.Config(
+			s.handlers(),
+			map[string]abep.VariableSpec{
+				"org":      {Resolve: s.resolveOrg},
+				"repo":     {Resolve: s.resolveRepo},
+				"bookmark": {Resolve: s.resolveBookmark},
 			},
-			Lifecycle: []string{"created", "forked", "renamed", "deleted"},
-			OnLifecycle: func(ctx context.Context, ev abep.LifecycleEvent) error {
+			func(ctx context.Context, ev abep.LifecycleEvent) error {
 				return s.handleLifecycleEvent(ctx, ev.Kind, ev)
 			},
-		},
+		),
 		abep.ServeOptions{
 			Handler: s.router(),
 			Run: func(runCtx context.Context, ext *abep.Extension) {
