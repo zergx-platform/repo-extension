@@ -444,11 +444,11 @@ func TestResolveSessionStrict(t *testing.T) {
 		t.Fatal("non-derived name should fail")
 	}
 	// legacy args still work
-	o, r, b, err := s.sessionBase(ctx, map[string]interface{}{"_org": "x", "_repo": "y", "_branch": "z"})
+	o, r, b, err := s.sessionBase(ctx, map[string]interface{}{"_org": "x", "_repo": "y", "_branch": "z"}, "")
 	if err != nil || o != "x" || r != "y" || b != "z" {
 		t.Fatalf("legacy base = %q %q %q %v", o, r, b, err)
 	}
-	if _, _, _, err = s.sessionBase(ctx, map[string]interface{}{}); err == nil {
+	if _, _, _, err = s.sessionBase(ctx, map[string]interface{}{}, ""); err == nil {
 		t.Fatal("expected error without session context")
 	}
 }
