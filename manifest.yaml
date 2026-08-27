@@ -104,16 +104,13 @@ tools:
           type: string
           description: Repository name (omitted = list all repositories in the org).
   - name: git-rebase
-    description: Rebase the commits unique to one branch onto a destination branch (linear history; source change ids are preserved). Returns the new tip and any conflicted file paths.
+    description: Rebase the commits unique to `source` onto this session's branch (the current workspace bookmark). The current branch advances (linear history; source change ids are preserved). The destination is always the session's own branch and cannot be overridden.
     input_schema:
       type: object
       properties:
         source:
           type: string
-          description: Branch/bookmark (or change id) whose commits are rebased onto `onto`.
-        onto:
-          type: string
-          description: Destination branch/bookmark. Defaults to the current workspace bookmark.
+          description: Branch/bookmark whose commits are rebased onto the current workspace branch.
       required: [source]
   - name: git-diff
     description: Compare file differences between two revisions, or the whole tree when `path` is omitted.
