@@ -112,6 +112,18 @@ tools:
           type: string
           description: Branch/bookmark whose commits are rebased onto the current workspace branch.
       required: [source]
+  - name: git-resolve
+    description: Resolve a conflict on this session's branch by writing the resolved content for a conflicted path. The branch tip must be in a conflicted state (e.g. after an unsuccessful rebase); read the path first (it renders with git-style conflict markers) to obtain the merged content, then write the final resolution here.
+    input_schema:
+      type: object
+      properties:
+        path:
+          type: string
+          description: Repo-relative path of the conflicted file to resolve.
+        content:
+          type: string
+          description: Full resolved file content to write at `path`.
+      required: [path, content]
   - name: git-diff
     description: Compare file differences between two revisions, or the whole tree when `path` is omitted.
     input_schema:

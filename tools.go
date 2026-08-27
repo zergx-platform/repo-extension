@@ -387,27 +387,54 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-source := abep.ArgString(args, "source")
-			if source == "" {
-				return "", nil, fmt.Errorf("missing 'source' argument")
-			}
-			// The destination is always this session's own branch (b): a tool
-			// must never move another branch's bookmark. The divergent commits
-			// of `source` are rebased onto `b`, and `b` advances.
-			body := map[string]interface{}{"source": source, "dest": b}
-			v, err := httpx.Post(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/rebase", body)
-			if err != nil {
-				return "", nil, fmt.Errorf("rebase failed: %w", err)
-			}
-			sum, _ := v["rebase"].(map[string]interface{})
-			commitID := strVal(sum, "commit_id")
-			conflicts := strSlice(sum, "conflicts")
-			if len(conflicts) > 0 {
-				return fmt.Sprintf("rebased '%s' onto '%s' with %d conflict(s): %s", source, b, len(conflicts), strings.Join(conflicts, ", ")),
-					map[string]interface{}{"commit_id": commitID, "conflicts": conflicts}, nil
-			}
-			return fmt.Sprintf("rebased '%s' onto '%s' (tip %s).", source, b, shortID(commitID)),
-				map[string]interface{}{"commit_id": commitID, "conflicts": []interface{}{}}, nil
+				source := abep.ArgString(args, "source")
+				if source == "" {
+					return "", nil, fmt.Errorf("missing 'source' argument")
+				}
+				// The destination is always this session's own branch (b): a tool
+				// must never move another branch's bookmark. The divergent commits
+				// of `source` are rebased onto `b`, and `b` advances.
+				body := map[string]interface{}{"source": source, "dest": b}
+				v, err := httpx.Post(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/rebase", body)
+				if err != nil {
+					return "", nil, fmt.Errorf("rebase failed: %w", err)
+				}
+				sum, _ := v["rebase"].(map[string]interface{})
+				commitID := strVal(sum, "commit_id")
+				conflicts := strSlice(sum, "conflicts")
+				if len(conflicts) > 0 {
+					return fmt.Sprintf("rebased '%s' onto '%s' with %d conflict(s): %s", source, b, len(conflicts), strings.Join(conflicts, ", ")),
+						map[string]interface{}{"commit_id": commitID, "conflicts": conflicts}, nil
+				}
+				return fmt.Sprintf("rebased '%s' onto '%s' (tip %s).", source, b, shortID(commitID)),
+					map[string]interface{}{"commit_id": commitID, "conflicts": []interface{}{}}, nil
+			},
+		},
+		"git-resolve": {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
+				o, r, b, err := s.sessionBase(ctx, args, sessionName)
+				if err != nil {
+					return "", nil, err
+				}
+				path := abep.ArgString(args, "path")
+				if path == "" {
+					return "", nil, fmt.Errorf("missing 'path' argument")
+				}
+				content := abep.ArgString(args, "content")
+				body := map[string]interface{}{"path": path, "content": content}
+				v, err := httpx.Post(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/resolve", body)
+				if err != nil {
+					return "", nil, fmt.Errorf("resolve failed: %w", err)
+				}
+				sum, _ := v["resolve"].(map[string]interface{})
+				commitID := strVal(sum, "commit_id")
+				conflicts := strSlice(sum, "conflicts")
+				if len(conflicts) > 0 {
+					return fmt.Sprintf("resolved '%s' (tip %s); remaining conflicts: %s", path, shortID(commitID), strings.Join(conflicts, ", ")),
+						map[string]interface{}{"commit_id": commitID, "conflicts": conflicts}, nil
+				}
+				return fmt.Sprintf("resolved '%s' (tip %s); no remaining conflicts.", path, shortID(commitID)),
+					map[string]interface{}{"commit_id": commitID, "conflicts": []interface{}{}}, nil
 			},
 		},
 		"git-blame": {
