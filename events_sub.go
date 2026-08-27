@@ -4,7 +4,7 @@ import (
 	"context"
 
 	abep "abep.dev/sdk"
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/naming"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/naming"
 )
 
 // handleLifecycleEvent mirrors one agent lifecycle event into the workspace

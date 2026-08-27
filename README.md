@@ -9,7 +9,7 @@ bookmark**, maintained eagerly via the agent's lifecycle trigger hooks.
 
 The agent owns session lifecycle and, after every committed action
 (create/fork/rename/delete), publishes a best-effort event to the durable
-JetStream stream `RCODER_NOTIFY`:
+JetStream stream `ZERGX_NOTIFY`:
 
 | Subject | Payload |
 | --- | --- |
@@ -59,8 +59,8 @@ reconciler never destroys agent sessions or jj state:
 ## NATS tools (unchanged protocol)
 
 `tool.call.{name}` → `tool.result.{call_id}` via
-`forgejo.develop.10.199.64.20.nip.io/rucoder/extension-sdk-go`; results
->256 KiB offload to the `RCODER_TOOL` object store.
+`forgejo.develop.10.199.64.20.nip.io/zergx/extension-sdk-go`; results
+>256 KiB offload to the `ZERGX_TOOL` object store.
 
 Tools: `read`, `write`, `edit`, `delete`, `ls`, `grep`, `explore`,
 `git-diff`, `git-blame`, `git-log`, `git-show`, `git-branches`.
@@ -90,11 +90,11 @@ bookmarks, commit-id prefixes, change-id prefixes, and `""` (head).
 
 | Env | Default |
 | --- | ------- |
-| `RUCODER_REPO_MANAGER_URL` | `http://rucoder-repo.temp.svc.cluster.local:80` |
-| `RUCODER_AGENT_URL` | `http://rucoder-agent.temp.svc.cluster.local:80` |
+| `RUCODER_REPO_MANAGER_URL` | `http://zergx-repo.temp.svc.cluster.local:80` |
+| `RUCODER_AGENT_URL` | `http://zergx-agent.temp.svc.cluster.local:80` |
 | `NATS_URL` | `nats://nats.develop.svc.cluster.local:4222` |
 | `POSTGRES_HOST/PORT/USER/PASSWORD` | dev cluster postgres |
-| `POSTGRES_DB_REPOEXT` | `rucoder_repoext` (private DB; never the agent's) |
+| `POSTGRES_DB_REPOEXT` | `zergx_repoext` (private DB; never the agent's) |
 | `RUCODER_RECONCILE_INTERVAL_SECS` | `60` |
 | `RUCODER_PORT` | `8080` |
 

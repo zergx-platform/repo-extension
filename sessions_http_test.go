@@ -4,8 +4,8 @@ import (
 	abep "abep.dev/sdk"
 	"context"
 	"encoding/json"
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/env"
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/naming"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/env"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/naming"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -242,7 +242,7 @@ func testStore(t *testing.T) *Store {
 		Port:     env.NormalizePort(env.Or("REPOEXT_TEST_PG_PORT", "5432")),
 		User:     env.Or("REPOEXT_TEST_PG_USER", "root"),
 		Password: env.Or("REPOEXT_TEST_PG_PASSWORD", "devpassword"),
-		DB:       env.Or("REPOEXT_TEST_PG_DB", "rucoder_repoext_test"),
+		DB:       env.Or("REPOEXT_TEST_PG_DB", "zergx_repoext_test"),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

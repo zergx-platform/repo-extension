@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	abep "abep.dev/sdk"
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/httpx"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/httpx"
 )
 
 // tools returns the repo tools, forwarding each to the jj-server Contents API.

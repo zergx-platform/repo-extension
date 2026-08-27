@@ -11,7 +11,7 @@ import (
 
 	abep "abep.dev/sdk"
 	natsbus "abep.dev/sdk/nats"
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/env"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/env"
 )
 
 //go:embed manifest.yaml
@@ -37,8 +37,8 @@ type server struct {
 func main() {
 	log := slog.Default().With("svc", "repo-extension")
 	s := &server{
-		base:  env.Or("RUCODER_REPO_MANAGER_URL", "http://rucoder-repo.temp.svc.cluster.local:80"),
-		agent: env.Or("RUCODER_AGENT_URL", "http://rucoder-agent.temp.svc.cluster.local:80"),
+		base:  env.Or("ZERGX_REPO_MANAGER_URL", "http://repo.zergx.svc.cluster.local:80"),
+		agent: env.Or("ZERGX_AGENT_URL", "http://agent.zergx.svc.cluster.local:80"),
 	}
 	s.jj = newJJClient(s.base)
 	s.ag = newAgentClient(s.agent)
@@ -86,8 +86,8 @@ func main() {
 			Handler: s.router(),
 			Run: func(runCtx context.Context, ext *abep.Extension) {
 				s.ext = ext
-				log.Info("listening", "port", env.Or("RUCODER_PORT", "8080"), "nats", natsURL)
-				go runReconciler(runCtx, s, time.Duration(env.Int("RUCODER_RECONCILE_INTERVAL_SECS", 60))*time.Second)
+				log.Info("listening", "port", env.Or("ZERGX_PORT", "8080"), "nats", natsURL)
+				go runReconciler(runCtx, s, time.Duration(env.Int("ZERGX_RECONCILE_INTERVAL_SECS", 60))*time.Second)
 			},
 		},
 	); err != nil {
@@ -102,6 +102,6 @@ func pgConfig() PgConfig {
 		Port:     env.NormalizePort(env.Or("POSTGRES_PORT", "5432")),
 		User:     env.Or("POSTGRES_USER", "root"),
 		Password: env.Or("POSTGRES_PASSWORD", "devpassword"),
-		DB:       env.Or("POSTGRES_DB_REPOEXT", "rucoder_repoext"),
+		DB:       env.Or("POSTGRES_DB_REPOEXT", "zergx_repoext"),
 	}
 }

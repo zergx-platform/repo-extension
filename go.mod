@@ -1,11 +1,11 @@
-module forgejo.develop.10.199.64.20.nip.io/rucoder/repo-extension
+module forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension
 
 go 1.26
 
 require (
 	abep.dev/sdk v0.2.12
 	abep.dev/sdk/nats v0.2.5
-	forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared v0.1.0
+	forgejo.develop.10.199.64.20.nip.io/zergx/go-shared v0.1.0
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/jackc/pgx/v5 v5.10.0
 )
