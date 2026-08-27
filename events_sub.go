@@ -4,6 +4,7 @@ import (
 	"context"
 
 	abep "abep.dev/sdk"
+	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/naming"
 )
 
 // handleLifecycleEvent mirrors one agent lifecycle event into the workspace
@@ -12,13 +13,13 @@ func (s *server) handleLifecycleEvent(ctx context.Context, event string, env abe
 	var err error
 	switch event {
 	case "created":
-		org, repo, bm, ok := parseSessionName(env.SessionName)
+		org, repo, bm, ok := naming.Parse(env.SessionName)
 		if !ok {
 			return errBad("session %q does not match org:repo:bookmark naming — ignoring", env.SessionName)
 		}
 		err = s.ensureCreated(ctx, org, repo, bm, env.SessionName)
 	case "forked":
-		org, repo, bm, ok := parseSessionName(env.SessionName)
+		org, repo, bm, ok := naming.Parse(env.SessionName)
 		if !ok {
 			return errBad("session %q does not match org:repo:bookmark naming — ignoring", env.SessionName)
 		}
@@ -80,7 +81,7 @@ func (s *server) ensureForked(ctx context.Context, org, repo, bm, sid, parentSid
 	// Resolve the parent's bookmark; materialize the parent when unmapped
 	// (legacy or missed event) so the fork anchors at real work.
 	var parentBM string
-	if pOrg, pRepo, pBM, ok := parseSessionName(parentSid); ok {
+	if pOrg, pRepo, pBM, ok := naming.Parse(parentSid); ok {
 		if pOrg != org || pRepo != repo {
 			return errBad("fork across repositories (%s → %s/%s) — unsupported", parentSid, org, repo)
 		}
@@ -105,11 +106,11 @@ func (s *server) ensureForked(ctx context.Context, org, repo, bm, sid, parentSid
 // ensureRenamed: dual rename — new bookmark at the old one's position, row
 // update, old bookmark removed.
 func (s *server) ensureRenamed(ctx context.Context, fromSid, toSid string) error {
-	fromOrg, fromRepo, fromBM, ok := parseSessionName(fromSid)
+	fromOrg, fromRepo, fromBM, ok := naming.Parse(fromSid)
 	if !ok {
 		return errBad("session %q does not match naming — ignoring rename", fromSid)
 	}
-	toOrg, toRepo, toBM, ok := parseSessionName(toSid)
+	toOrg, toRepo, toBM, ok := naming.Parse(toSid)
 	if !ok {
 		return errBad("session %q does not match naming — ignoring rename", toSid)
 	}
@@ -141,7 +142,7 @@ func (s *server) ensureRenamed(ctx context.Context, fromSid, toSid string) error
 // ensureDeleted: bookmark + mapping row removed (bookmark-first order: a
 // crash mid-way leaves an adoptable orphan, never a dangling row).
 func (s *server) ensureDeleted(ctx context.Context, sid string) error {
-	org, repo, bm, ok := parseSessionName(sid)
+	org, repo, bm, ok := naming.Parse(sid)
 	if !ok {
 		return errBad("session %q does not match naming — ignoring delete", sid)
 	}

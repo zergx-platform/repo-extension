@@ -4,6 +4,8 @@ import (
 	abep "abep.dev/sdk"
 	"context"
 	"encoding/json"
+	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/env"
+	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/naming"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -236,11 +238,11 @@ func testStore(t *testing.T) *Store {
 		t.Skip("set REPOEXT_TEST_PG=1 (and optional REPOEXT_TEST_PG_HOST/DB) to run PG-backed tests")
 	}
 	cfg := PgConfig{
-		Host:     envOr("REPOEXT_TEST_PG_HOST", "postgres.develop.svc.cluster.local"),
-		Port:     normalizePort(envOr("REPOEXT_TEST_PG_PORT", "5432")),
-		User:     envOr("REPOEXT_TEST_PG_USER", "root"),
-		Password: envOr("REPOEXT_TEST_PG_PASSWORD", "devpassword"),
-		DB:       envOr("REPOEXT_TEST_PG_DB", "rucoder_repoext_test"),
+		Host:     env.Or("REPOEXT_TEST_PG_HOST", "postgres.develop.svc.cluster.local"),
+		Port:     env.NormalizePort(env.Or("REPOEXT_TEST_PG_PORT", "5432")),
+		User:     env.Or("REPOEXT_TEST_PG_USER", "root"),
+		Password: env.Or("REPOEXT_TEST_PG_PASSWORD", "devpassword"),
+		DB:       env.Or("REPOEXT_TEST_PG_DB", "rucoder_repoext_test"),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -576,7 +578,7 @@ func TestReconcileBackfillsLostEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"acme:api:main", "acme:api:feat"} {
-		org, repo, bm, _ := parseSessionName(name)
+		org, repo, bm, _ := naming.Parse(name)
 		if row, _ := s.store.GetRow(ctx, org, repo, bm); row == nil || row.SessionName != name {
 			t.Fatalf("backfill missing row for %s", name)
 		}

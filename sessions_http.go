@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/naming"
 	"net/http"
 	"sync"
 	"time"
@@ -65,7 +66,7 @@ func (s *server) resolveSession(ctx context.Context, sid string) (string, string
 		return "", "", "", errDownstream("postgres", err)
 	}
 	if row == nil {
-		if _, _, _, ok := parseSessionName(sid); !ok {
+		if _, _, _, ok := naming.Parse(sid); !ok {
 			return "", "", "", errBad("session '%s' does not match org:repo:bookmark naming; cannot resolve workspace", sid)
 		}
 		return "", "", "", errNotFound("session '%s' workspace is not ready yet (lifecycle event in progress); retry later", sid)
@@ -106,7 +107,7 @@ func (s *server) completeAdopt(ctx context.Context, org, repo, bookmark string) 
 	if !tree.bookmarkExists(org, repo, bookmark) {
 		return "", false, errNotFound("bookmark %s/%s#%s does not exist", org, repo, bookmark)
 	}
-	name := sessionName(org, repo, bookmark)
+	name := naming.Session(org, repo, bookmark)
 	if err := s.ag.EnsureSession(ctx, name); err != nil {
 		return "", false, err
 	}
@@ -218,7 +219,7 @@ func (s *server) listBookmarks(w http.ResponseWriter, r *http.Request) {
 // orphan bookmark to a (created) session. Idempotent.
 func (s *server) ensureSession(w http.ResponseWriter, r *http.Request) {
 	org, repo, bm := chi.URLParam(r, "org"), chi.URLParam(r, "repo"), chi.URLParam(r, "bm")
-	if !validComponent(bm) {
+	if !naming.ValidComponent(bm) {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"ok": false, "error": "invalid bookmark name; cannot derive session"})
 		return

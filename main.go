@@ -6,13 +6,12 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
 	abep "abep.dev/sdk"
 	natsbus "abep.dev/sdk/nats"
+	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/env"
 )
 
 //go:embed manifest.yaml
@@ -38,8 +37,8 @@ type server struct {
 func main() {
 	log := slog.Default().With("svc", "repo-extension")
 	s := &server{
-		base:  envOr("RUCODER_REPO_MANAGER_URL", "http://rucoder-repo.temp.svc.cluster.local:80"),
-		agent: envOr("RUCODER_AGENT_URL", "http://rucoder-agent.temp.svc.cluster.local:80"),
+		base:  env.Or("RUCODER_REPO_MANAGER_URL", "http://rucoder-repo.temp.svc.cluster.local:80"),
+		agent: env.Or("RUCODER_AGENT_URL", "http://rucoder-agent.temp.svc.cluster.local:80"),
 	}
 	s.jj = newJJClient(s.base)
 	s.ag = newAgentClient(s.agent)
@@ -56,7 +55,7 @@ func main() {
 	s.store = store
 	defer store.Close()
 
-	natsURL := envOr("NATS_URL", "nats://nats.develop.svc.cluster.local:4222")
+	natsURL := env.Or("NATS_URL", "nats://nats.develop.svc.cluster.local:4222")
 
 	nbus, err := natsbus.Connect(natsURL)
 	if err != nil {
@@ -87,8 +86,8 @@ func main() {
 			Handler: s.router(),
 			Run: func(runCtx context.Context, ext *abep.Extension) {
 				s.ext = ext
-				log.Info("listening", "port", envOr("RUCODER_PORT", "8080"), "nats", natsURL)
-				go runReconciler(runCtx, s, time.Duration(envInt("RUCODER_RECONCILE_INTERVAL_SECS", 60))*time.Second)
+				log.Info("listening", "port", env.Or("RUCODER_PORT", "8080"), "nats", natsURL)
+				go runReconciler(runCtx, s, time.Duration(env.Int("RUCODER_RECONCILE_INTERVAL_SECS", 60))*time.Second)
 			},
 		},
 	); err != nil {
@@ -99,38 +98,10 @@ func main() {
 
 func pgConfig() PgConfig {
 	return PgConfig{
-		Host:     envOr("POSTGRES_HOST", "postgres.develop.svc.cluster.local"),
-		Port:     normalizePort(envOr("POSTGRES_PORT", "5432")),
-		User:     envOr("POSTGRES_USER", "root"),
-		Password: envOr("POSTGRES_PASSWORD", "devpassword"),
-		DB:       envOr("POSTGRES_DB_REPOEXT", "rucoder_repoext"),
+		Host:     env.Or("POSTGRES_HOST", "postgres.develop.svc.cluster.local"),
+		Port:     env.NormalizePort(env.Or("POSTGRES_PORT", "5432")),
+		User:     env.Or("POSTGRES_USER", "root"),
+		Password: env.Or("POSTGRES_PASSWORD", "devpassword"),
+		DB:       env.Or("POSTGRES_DB_REPOEXT", "rucoder_repoext"),
 	}
-}
-
-// normalizePort accepts both plain ports ("5432") and k8s link-style values
-// ("tcp://10.0.0.1:5432") that pods inherit from the environment.
-func normalizePort(v string) string {
-	if i := strings.LastIndexByte(v, ':'); i >= 0 {
-		candidate := v[i+1:]
-		if candidate != "" {
-			return candidate
-		}
-	}
-	return v
-}
-
-func envOr(k, d string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return d
-}
-
-func envInt(k string, d int) int {
-	if v := os.Getenv(k); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return d
 }

@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	abep "abep.dev/sdk"
+	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/httpx"
 )
 
 // tools returns the repo tools, forwarding each to the jj-server Contents API.
@@ -23,7 +25,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 
 	// readFileRaw fetches the file; returns (raw utf8, sha, size) or error.
 	readFileRaw := func(ctx context.Context, o, r, b, path string) (string, string, int64, error) {
-		v, err := get(ctx, contentsPath(o, r, b, path))
+		v, err := httpx.Get(ctx, contentsPath(o, r, b, path))
 		if err != nil {
 			return "", "", 0, err
 		}
@@ -60,7 +62,13 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				text, sha, size, err := readFileRaw(ctx, o, r, b, path)
 				if err != nil {
-					return fmt.Sprintf("failed to read file '%s': not found or inaccessible", path), nil, nil
+					// 404 keeps the agent-friendly wording; any other
+					// failure (5xx, timeout, bad body) is a real error so
+					// the agent never mistakes an outage for a missing file.
+					if errors.Is(err, httpx.ErrNotFound) {
+						return fmt.Sprintf("failed to read file '%s': not found or inaccessible", path), nil, nil
+					}
+					return "", nil, fmt.Errorf("read '%s': %w", path, err)
 				}
 				offset := abep.ArgInt(args, "offset", 1)
 				limit := abep.ArgInt(args, "limit", 0)
@@ -136,7 +144,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 					"content": base64.StdEncoding.EncodeToString([]byte(content)),
 					"message": message,
 				}
-				v, err := put(ctx, contentsPath(o, r, b, path), body)
+				v, err := httpx.Put(ctx, contentsPath(o, r, b, path), body)
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to write file: %w", err)
 				}
@@ -164,7 +172,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				if message == "" {
 					message = "delete " + path
 				}
-				v, err := delBody(ctx, contentsPath(o, r, b, path), map[string]interface{}{"message": message})
+				v, err := httpx.Delete(ctx, contentsPath(o, r, b, path), map[string]interface{}{"message": message})
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to delete file: %w", err)
 				}
@@ -197,9 +205,12 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 
 				// 1. read + capture sha (read-before-edit check)
 				url := contentsPath(o, r, b, path)
-				cur, err := get(ctx, url)
+				cur, err := httpx.Get(ctx, url)
 				if err != nil {
-					return "", nil, fmt.Errorf("failed to read file '%s': not found or inaccessible", path)
+					if errors.Is(err, httpx.ErrNotFound) {
+						return "", nil, fmt.Errorf("failed to read file '%s': not found or inaccessible", path)
+					}
+					return "", nil, fmt.Errorf("read '%s' before edit: %w", path, err)
 				}
 				sha := strVal(cur, "sha")
 				var current string
@@ -225,7 +236,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 					"message": message,
 					"sha":     sha,
 				}
-				v, err := put(ctx, url, body)
+				v, err := httpx.Put(ctx, url, body)
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to write edited result: %w", err)
 				}
@@ -252,7 +263,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/tree")
+				v, err := httpx.Get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/tree")
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to list directory: %w", err)
 				}
@@ -289,7 +300,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 					return "", nil, fmt.Errorf("missing 'pattern' argument")
 				}
 				q := url.Values{"pattern": {pattern}}
-				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/search?"+q.Encode())
+				v, err := httpx.Get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/search?"+q.Encode())
 				if err != nil {
 					return "", nil, fmt.Errorf("search failed: %w", err)
 				}
@@ -313,7 +324,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 		},
 		"explore": {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
-				v, err := get(ctx, s.base+"/api/v1/repos")
+				v, err := httpx.Get(ctx, s.base+"/api/v1/repos")
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to browse structure: %w", err)
 				}
@@ -349,7 +360,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				revB := abep.ArgString(args, "rev_b")
 				path := abep.ArgString(args, "path")
 				q := url.Values{"rev_a": {revA}, "rev_b": {revB}, "path": {path}}
-				v, err := get(ctx, s.base+"/api/v1/git-diff/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
+				v, err := httpx.Get(ctx, s.base+"/api/v1/git-diff/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to get diff: %w", err)
 				}
@@ -369,7 +380,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				rev := abep.ArgString(args, "rev")
 				path := abep.ArgString(args, "path")
 				q := url.Values{"rev": {rev}, "path": {path}}
-				v, err := get(ctx, s.base+"/api/v1/git-blame/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
+				v, err := httpx.Get(ctx, s.base+"/api/v1/git-blame/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to get blame: %w", err)
 				}
@@ -393,7 +404,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				}
 				limit := abep.ArgInt(args, "limit", 50)
 				q := url.Values{"limit": {fmt.Sprintf("%d", limit)}}
-				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/log?"+q.Encode())
+				v, err := httpx.Get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/log?"+q.Encode())
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to get commit history: %w", err)
 				}
@@ -422,7 +433,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 					return "", nil, err
 				}
 				rev := abep.ArgString(args, "rev")
-				v, err := get(ctx, s.base+"/api/v1/git-show/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(rev))
+				v, err := httpx.Get(ctx, s.base+"/api/v1/git-show/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(rev))
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to view change: %w", err)
 				}
@@ -439,7 +450,7 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				v, err := get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/bookmarks")
+				v, err := httpx.Get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/bookmarks")
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to list branches: %w", err)
 				}

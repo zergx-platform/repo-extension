@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/naming"
 	"time"
 )
 
@@ -124,7 +125,7 @@ func backfillWorkspaces(ctx context.Context, s *server, sessions map[string]bool
 		if mapped[name] {
 			continue
 		}
-		org, repo, bm, ok := parseSessionName(name)
+		org, repo, bm, ok := naming.Parse(name)
 		if !ok {
 			continue // non-workspace session (e.g. "hi") — not our contract
 		}
