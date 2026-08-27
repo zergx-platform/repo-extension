@@ -352,28 +352,68 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 		},
 		"git-diff": {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
-				o, r, _, err := s.sessionBase(ctx, args, sessionName)
+				o, r, _, err := s.sessionBaseXO(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
 				}
 				revA := abep.ArgString(args, "rev_a")
 				revB := abep.ArgString(args, "rev_b")
+				if revA == "" || revB == "" {
+					return "", nil, fmt.Errorf("rev_a and rev_b are required")
+				}
 				path := abep.ArgString(args, "path")
-				q := url.Values{"rev_a": {revA}, "rev_b": {revB}, "path": {path}}
+				q := url.Values{"rev_a": {revA}, "rev_b": {revB}}
+				if path != "" {
+					q.Set("path", path)
+				}
 				v, err := httpx.Get(ctx, s.base+"/api/v1/git-diff/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to get diff: %w", err)
 				}
 				diff := strVal(v, "diff")
-				if strings.TrimSpace(diff) == "" {
-					return fmt.Sprintf("file '%s' has no diff between '%s' and '%s'.", path, revA, revB), map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}, nil
+				scope := "tree"
+				if path != "" {
+					scope = fmt.Sprintf("file '%s'", path)
 				}
-				return fmt.Sprintf("diff of file '%s' between '%s'..'%s':\n%s", path, revA, revB, diff), map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}, nil
+				if strings.TrimSpace(diff) == "" {
+					return fmt.Sprintf("no diff between '%s' and '%s' (%s).", revA, revB, scope), map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}, nil
+				}
+				return fmt.Sprintf("diff (%s) between '%s'..'%s':\n%s", scope, revA, revB, diff), map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}, nil
+			},
+		},
+		"git-rebase": {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
+				o, r, b, err := s.sessionBase(ctx, args, sessionName)
+				if err != nil {
+					return "", nil, err
+				}
+				source := abep.ArgString(args, "source")
+				if source == "" {
+					return "", nil, fmt.Errorf("missing 'source' argument")
+				}
+				onto := abep.ArgString(args, "onto")
+				if onto == "" {
+					onto = b
+				}
+				body := map[string]interface{}{"source": source}
+				v, err := httpx.Post(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(onto)+"/rebase", body)
+				if err != nil {
+					return "", nil, fmt.Errorf("rebase failed: %w", err)
+				}
+				sum, _ := v["rebase"].(map[string]interface{})
+				commitID := strVal(sum, "commit_id")
+				conflicts := strSlice(sum, "conflicts")
+				if len(conflicts) > 0 {
+					return fmt.Sprintf("rebased '%s' onto '%s' with %d conflict(s): %s", source, onto, len(conflicts), strings.Join(conflicts, ", ")),
+						map[string]interface{}{"commit_id": commitID, "conflicts": conflicts}, nil
+				}
+				return fmt.Sprintf("rebased '%s' onto '%s' (tip %s).", source, onto, shortID(commitID)),
+					map[string]interface{}{"commit_id": commitID, "conflicts": []interface{}{}}, nil
 			},
 		},
 		"git-blame": {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
-				o, r, _, err := s.sessionBase(ctx, args, sessionName)
+				o, r, _, err := s.sessionBaseXO(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
 				}
@@ -398,12 +438,21 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 		},
 		"git-log": {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (string, map[string]interface{}, error) {
-				o, r, _, err := s.sessionBase(ctx, args, sessionName)
+				o, r, _, err := s.sessionBaseXO(ctx, args, sessionName)
 				if err != nil {
 					return "", nil, err
 				}
 				limit := abep.ArgInt(args, "limit", 50)
 				q := url.Values{"limit": {fmt.Sprintf("%d", limit)}}
+				if rev := abep.ArgString(args, "rev"); rev != "" {
+					q.Set("rev", rev)
+				}
+				if since := abep.ArgString(args, "since"); since != "" {
+					q.Set("since", since)
+				}
+				if until := abep.ArgString(args, "until"); until != "" {
+					q.Set("until", until)
+				}
 				v, err := httpx.Get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/log?"+q.Encode())
 				if err != nil {
 					return "", nil, fmt.Errorf("failed to get commit history: %w", err)
@@ -481,6 +530,28 @@ func (s *server) sessionBase(ctx context.Context, args map[string]interface{}, s
 	o, r, b := abep.ArgString(args, "_org"), abep.ArgString(args, "_repo"), abep.ArgString(args, "_branch")
 	if o == "" || r == "" {
 		return "", "", "", fmt.Errorf("missing session context (session_name or _org/_repo)")
+	}
+	return o, r, b, nil
+}
+
+// sessionBaseXO is sessionBase with an explicit argument `org`/`repo` capable
+// of overriding the session workspace (read-only cross-repo access). The
+// bookmark still defaults to the workspace's branch when not passed.
+func (s *server) sessionBaseXO(ctx context.Context, args map[string]interface{}, sessionName string) (string, string, string, error) {
+	o, r, b, err := s.sessionBase(ctx, args, sessionName)
+	if err != nil {
+		return "", "", "", err
+	}
+	if arg := abep.ArgString(args, "org"); arg != "" {
+		o = arg
+	}
+	if arg := abep.ArgString(args, "repo"); arg != "" {
+		r = arg
+	}
+	if arg := abep.ArgString(args, "branch"); arg != "" {
+		b = arg
+	} else if arg := abep.ArgString(args, "bookmark"); arg != "" {
+		b = arg
 	}
 	return o, r, b, nil
 }

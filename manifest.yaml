@@ -103,8 +103,20 @@ tools:
         repo:
           type: string
           description: Repository name (omitted = list all repositories in the org).
+  - name: git-rebase
+    description: Rebase the commits unique to one branch onto a destination branch (linear history; source change ids are preserved). Returns the new tip and any conflicted file paths.
+    input_schema:
+      type: object
+      properties:
+        source:
+          type: string
+          description: Branch/bookmark (or change id) whose commits are rebased onto `onto`.
+        onto:
+          type: string
+          description: Destination branch/bookmark. Defaults to the current workspace bookmark.
+      required: [source]
   - name: git-diff
-    description: Compare file differences between two revisions.
+    description: Compare file differences between two revisions, or the whole tree when `path` is omitted.
     input_schema:
       type: object
       properties:
@@ -116,8 +128,8 @@ tools:
           description: End revision (change ID or bookmark).
         path:
           type: string
-          description: File path to diff.
-      required: [rev_a, rev_b, path]
+          description: Optional file path; omitted = whole-tree diff between the two revisions.
+      required: [rev_a, rev_b]
   - name: git-blame
     description: Annotate each line of a file with the change that introduced it.
     input_schema:
@@ -131,10 +143,19 @@ tools:
           description: File path to trace.
       required: [rev, path]
   - name: git-log
-    description: View commit history.
+    description: View commit history, optionally scoped to a branch and a time window.
     input_schema:
       type: object
       properties:
+        rev:
+          type: string
+          description: "Branch/bookmark or change id to start from (default: current branch head)."
+        since:
+          type: string
+          description: Inclusive lower time bound (YYYY-MM-DD or RFC3339).
+        until:
+          type: string
+          description: Inclusive upper time bound (YYYY-MM-DD or RFC3339).
         limit:
           type: integer
           description: Maximum number of commits to return (default 50).

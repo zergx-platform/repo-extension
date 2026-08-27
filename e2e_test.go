@@ -24,8 +24,8 @@ func TestManifestBinding(t *testing.T) {
 	if m.ID != "repo" {
 		t.Fatalf("manifest id = %q", m.ID)
 	}
-	if len(m.Tools) != 12 {
-		t.Fatalf("manifest tools = %d, want 12", len(m.Tools))
+	if len(m.Tools) != 13 {
+		t.Fatalf("manifest tools = %d, want 13", len(m.Tools))
 	}
 	if len(m.Variables) != 3 {
 		t.Fatalf("manifest variables = %d, want 3", len(m.Variables))
@@ -104,8 +104,8 @@ func TestDiscoverWire(t *testing.T) {
 	if len(manifests) != 1 || manifests[0].ID != "repo" {
 		t.Fatalf("discover = %+v", manifests)
 	}
-	if len(manifests[0].Tools) != 12 {
-		t.Fatalf("discover tools = %d, want 12", len(manifests[0].Tools))
+	if len(manifests[0].Tools) != 13 {
+		t.Fatalf("discover tools = %d, want 13", len(manifests[0].Tools))
 	}
 	cap := map[string]bool{}
 	for _, c := range manifests[0].Capabilities {
