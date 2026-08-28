@@ -19,13 +19,13 @@ var manifestYaml []byte
 
 // server wires the two faces of repo-extension:
 //
-//   - tool face (NATS): agent file/git tools forwarding to jj-server, with
+//   - tool face (NATS): agent file/git tools forwarding to jjlab, with
 //     the (org, repo, bookmark) triple resolved from the injected `_session`
 //     via the mapping table;
 //   - workspace face: lifecycle events from the agent (durable NATS
 //     subscription) eagerly mirrored into jj bookmarks + mapping rows.
 type server struct {
-	base  string // jj-server base URL
+	base  string // jjlab base URL
 	agent string // agent-ts base URL
 	store *Store
 	cache *sessCache
@@ -37,7 +37,7 @@ type server struct {
 func main() {
 	log := slog.Default().With("svc", "repo-extension")
 	s := &server{
-		base:  env.Or("ZERGX_REPO_MANAGER_URL", "http://repo.zergx.svc.cluster.local:80"),
+		base:  env.Or("ZERGX_REPO_MANAGER_URL", "http://jjlab.zergx.svc.cluster.local:80"),
 		agent: env.Or("ZERGX_AGENT_URL", "http://agent.zergx.svc.cluster.local:80"),
 	}
 	s.jj = newJJClient(s.base)

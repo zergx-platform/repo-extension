@@ -1,7 +1,7 @@
 # repo-extension
 
 Go extension server (NATS tool layer) replacing the Rust `repo-tools`
-service. It forwards agent file/git tools to the jj-server Contents API and
+service. It forwards agent file/git tools to the jjlab Contents API and
 keeps every coding session's jj workspace in a strict **1:1 with its
 bookmark**, maintained eagerly via the agent's lifecycle trigger hooks.
 
@@ -81,7 +81,7 @@ event-driven; there are no workspace-write endpoints.
 | `GET /api/v1/session-map?session=NAME` | reverse lookup |
 | `POST /api/v1/repos/{o}/{r}/bookmarks/{bm}/session` | bind an orphan bookmark to a (created) session, idempotent |
 
-## jj-server requirement
+## jjlab requirement
 
 `POST /api/v1/repos/{org}/{repo}/bookmarks` must accept `rev` resolving
 bookmarks, commit-id prefixes, change-id prefixes, and `""` (head).

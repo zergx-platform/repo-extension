@@ -13,8 +13,8 @@ import (
 	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/httpx"
 )
 
-// tools returns the repo tools, forwarding each to the jj-server Contents API.
-// handlers returns the repo tool handlers, forwarding each to the jj-server
+// tools returns the repo tools, forwarding each to the jjlab Contents API.
+// handlers returns the repo tool handlers, forwarding each to the jjlab
 // Contents API. Descriptions/schemas live in manifest.yaml (the single
 // declarative protocol source); each handler is bound by tool name.
 func (s *server) handlers() map[string]abep.ToolSpec {
@@ -387,11 +387,11 @@ func (s *server) handlers() map[string]abep.ToolSpec {
 				if err != nil {
 					return "", nil, err
 				}
-				source := abep.ArgString(args, "source")
-				if source == "" {
-					return "", nil, fmt.Errorf("missing 'source' argument")
-				}
-				// The destination is always this session's own branch (b): a tool
+source := abep.ArgString(args, "source")
+			if source == "" {
+				return "", nil, fmt.Errorf("missing 'source' argument")
+			}
+			// The destination is always this session's own branch (b): a tool
 				// must never move another branch's bookmark. The divergent commits
 				// of `source` are rebased onto `b`, and `b` advances.
 				body := map[string]interface{}{"source": source, "dest": b}

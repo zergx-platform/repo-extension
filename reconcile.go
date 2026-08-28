@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// runReconciler converges drift between jj-server bookmarks, the mapping
+// runReconciler converges drift between jjlab bookmarks, the mapping
 // table, and agent sessions. It is the correctness backstop for the
 // best-effort lifecycle events — every rule is idempotent:
 //

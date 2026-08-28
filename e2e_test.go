@@ -117,7 +117,7 @@ func TestDiscoverWire(t *testing.T) {
 }
 
 // TestExploreWire drives the explore tool (no session context required)
-// through the abep envelope against a fake jj-server.
+// through the abep envelope against a fake jjlab.
 func TestExploreWire(t *testing.T) {
 	jj := newFakeJJ()
 	defer jj.Close()

@@ -17,7 +17,7 @@ import (
 
 // ---- in-memory fakes ----
 
-// fakeJJ emulates the jj-server REST surface repo-extension depends on.
+// fakeJJ emulates the jjlab REST surface repo-extension depends on.
 type fakeJJ struct {
 	mu     sync.Mutex
 	repos  map[string]map[string][]string // org -> repo -> bookmarks
