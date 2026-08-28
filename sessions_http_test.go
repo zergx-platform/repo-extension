@@ -238,7 +238,7 @@ func testStore(t *testing.T) *Store {
 		t.Skip("set REPOEXT_TEST_PG=1 (and optional REPOEXT_TEST_PG_HOST/DB) to run PG-backed tests")
 	}
 	cfg := PgConfig{
-		Host:     env.Or("REPOEXT_TEST_PG_HOST", "postgres.develop.svc.cluster.local"),
+		Host:     env.Or("REPOEXT_TEST_PG_HOST", "postgres.zergx.svc.cluster.local"),
 		Port:     env.NormalizePort(env.Or("REPOEXT_TEST_PG_PORT", "5432")),
 		User:     env.Or("REPOEXT_TEST_PG_USER", "root"),
 		Password: env.Or("REPOEXT_TEST_PG_PASSWORD", "devpassword"),
