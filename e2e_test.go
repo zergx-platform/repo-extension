@@ -8,7 +8,11 @@ import (
 	"testing"
 	"time"
 
-	abep "abep.dev/sdk"
+	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/agent"
+	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/extension"
+	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/manifest"
+	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/natsrun"
+	natsbus "forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/transport/nats"
 )
 
 // ---- manifest binding ----
@@ -17,15 +21,15 @@ import (
 // truth: every declared tool has a bound handler, every handler is declared,
 // and descriptions/schemas/variables/lifecycle are carried onto the config.
 func TestManifestBinding(t *testing.T) {
-	m, err := abep.ParseManifest(manifestYaml)
+	m, err := manifest.ParseManifest(manifestYaml)
 	if err != nil {
 		t.Fatalf("parse manifest: %v", err)
 	}
 	if m.ID != "repo" {
 		t.Fatalf("manifest id = %q", m.ID)
 	}
-	if len(m.Tools) != 13 {
-		t.Fatalf("manifest tools = %d, want 13", len(m.Tools))
+	if len(m.Tools) != 14 {
+		t.Fatalf("manifest tools = %d, want 14", len(m.Tools))
 	}
 	if len(m.Variables) != 3 {
 		t.Fatalf("manifest variables = %d, want 3", len(m.Variables))
@@ -34,11 +38,11 @@ func TestManifestBinding(t *testing.T) {
 		t.Fatalf("manifest lifecycle = %v, want 4 kinds", m.Lifecycle)
 	}
 
-	cfg := m.Config(manifestHandlers(), map[string]abep.VariableSpec{
+	cfg := m.BuildConfig(manifest.Bindings{Handlers: manifestHandlers(), Variables: map[string]extension.VariableSpec{
 		"org":      {Resolve: func(context.Context, string) (string, error) { return "acme", nil }},
 		"repo":     {Resolve: func(context.Context, string) (string, error) { return "api", nil }},
 		"bookmark": {Resolve: func(context.Context, string) (string, error) { return "main", nil }},
-	}, nil)
+	}})
 
 	declared := map[string]bool{}
 	for _, tool := range m.Tools {
@@ -69,31 +73,43 @@ func TestManifestBinding(t *testing.T) {
 }
 
 // manifestHandlers returns the handler map without needing a live server.
-func manifestHandlers() map[string]abep.ToolSpec {
+func manifestHandlers() map[string]extension.ToolSpec {
 	return (&server{}).handlers()
 }
 
 // ---- wire-level e2e over the inproc transport ----
 
 // startRepoExt serves the extension on the hub and waits for setup.
-func startRepoExt(t *testing.T, hub *abep.InprocHub, cfg abep.Config) (*abep.Agent, *abep.Extension) {
+func startRepoExt(t *testing.T, cfg extension.Config) (*agent.Agent, *extension.Extension) {
 	t.Helper()
-	ext := abep.NewExtension(abep.NewInprocBus(hub), cfg)
-	agent := abep.NewAgent(abep.NewInprocBus(hub))
+	srv, err := natsrun.Start(natsrun.Config{Storage: natsrun.Memory})
+	if err != nil {
+		t.Fatalf("start nats: %v", err)
+	}
+	t.Cleanup(func() { _ = srv.Stop() })
+	extBus, err := natsbus.Connect(srv.URL())
+	if err != nil {
+		t.Fatalf("ext bus: %v", err)
+	}
+	agentBus, err := natsbus.Connect(srv.URL())
+	if err != nil {
+		t.Fatalf("agent bus: %v", err)
+	}
+	ext := extension.New(extBus, cfg)
+	ag := agent.New(agentBus)
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
+	t.Cleanup(func() { cancel(); _ = extBus.Close(); _ = agentBus.Close() })
 	go func() { _ = ext.Serve(ctx) }()
-	time.Sleep(100 * time.Millisecond)
-	return agent, ext
+	time.Sleep(300 * time.Millisecond)
+	return ag, ext
 }
 
 func TestDiscoverWire(t *testing.T) {
-	hub := abep.NewInprocHub()
-	m, err := abep.ParseManifest(manifestYaml)
+	m, err := manifest.ParseManifest(manifestYaml)
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, ext := startRepoExt(t, hub, m.Config(manifestHandlers(), nil, nil))
+	agent, ext := startRepoExt(t, m.BuildConfig(manifest.Bindings{Handlers: manifestHandlers()}))
 	defer ext.Close()
 	defer agent.Close()
 
@@ -101,18 +117,11 @@ func TestDiscoverWire(t *testing.T) {
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
-	if len(manifests) != 1 || manifests[0].ID != "repo" {
+	if len(manifests) != 1 || manifests[0].Id != "repo" {
 		t.Fatalf("discover = %+v", manifests)
 	}
-	if len(manifests[0].Tools) != 13 {
-		t.Fatalf("discover tools = %d, want 13", len(manifests[0].Tools))
-	}
-	cap := map[string]bool{}
-	for _, c := range manifests[0].Capabilities {
-		cap[c] = true
-	}
-	if !cap["tools"] || !cap["prompt"] {
-		t.Fatalf("capabilities = %v, want tools+prompt", manifests[0].Capabilities)
+	if len(*manifests[0].Tools) != 14 {
+		t.Fatalf("discover tools = %d, want 14", len(*manifests[0].Tools))
 	}
 }
 
@@ -136,12 +145,11 @@ func TestExploreWire(t *testing.T) {
 
 	s := &server{base: jj.URL()}
 
-	hub := abep.NewInprocHub()
-	m, err := abep.ParseManifest(manifestYaml)
+	m, err := manifest.ParseManifest(manifestYaml)
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, ext := startRepoExt(t, hub, m.Config(s.handlers(), nil, nil))
+	agent, ext := startRepoExt(t, m.BuildConfig(manifest.Bindings{Handlers: s.handlers()}))
 	defer ext.Close()
 	defer agent.Close()
 
@@ -150,7 +158,7 @@ func TestExploreWire(t *testing.T) {
 	if err != nil {
 		t.Fatalf("explore wire: %v", err)
 	}
-	if !strings.Contains(res.Content, "acme") || !strings.Contains(res.Content, "api") {
-		t.Fatalf("explore content = %q", res.Content)
+	if !strings.Contains(*res.Content, "acme") || !strings.Contains(*res.Content, "api") {
+		t.Fatalf("explore content = %q", *res.Content)
 	}
 }

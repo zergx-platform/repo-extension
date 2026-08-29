@@ -89,10 +89,10 @@ func TestReadTool404Vs500(t *testing.T) {
 	s := &server{base: srv.URL}
 	h := s.handlers()["read"]
 	exec := func() (string, error) {
-		out, _, err := h.Execute(context.Background(),
+		res, err := h.Execute(context.Background(),
 			map[string]interface{}{"path": "f.txt", "_org": "o", "_repo": "r", "_branch": "main"},
 			"", "")
-		return out, err
+		return res.Content, err
 	}
 
 	out, err := exec()

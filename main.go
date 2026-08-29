@@ -9,8 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	abep "abep.dev/sdk"
-	natsbus "abep.dev/sdk/nats"
+	abcprotocol "forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go"
+	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/extension"
+	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/manifest"
+	natsbus "forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/transport/nats"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/env"
 )
 
@@ -31,7 +33,7 @@ type server struct {
 	cache *sessCache
 	jj    *jjClient
 	ag    *agentClient
-	ext   *abep.Extension
+	ext   *extension.Extension
 }
 
 func main() {
@@ -63,28 +65,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	manifest, err := abep.ParseManifest(manifestYaml)
+	m, err := manifest.ParseManifest(manifestYaml)
 	if err != nil {
 		log.Error("load manifest failed", "err", err)
 		os.Exit(1)
 	}
 
-	if err := abep.Serve(
-		nbus,
-		manifest.Config(
-			s.handlers(),
-			map[string]abep.VariableSpec{
+	if err := extension.Serve(
+		extension.New(nbus, m.BuildConfig(manifest.Bindings{
+			Handlers: s.handlers(),
+			Variables: map[string]extension.VariableSpec{
 				"org":      {Resolve: s.resolveOrg},
 				"repo":     {Resolve: s.resolveRepo},
 				"bookmark": {Resolve: s.resolveBookmark},
 			},
-			func(ctx context.Context, ev abep.LifecycleEvent) error {
-				return s.handleLifecycleEvent(ctx, ev.Kind, ev)
+			OnLifecycle: func(ctx context.Context, ev abcprotocol.LifecycleEvent) error {
+				return s.handleLifecycleEvent(ctx, string(ev.Kind), ev)
 			},
-		),
-		abep.ServeOptions{
+		})),
+		extension.ServeOptions{
 			Handler: s.router(),
-			Run: func(runCtx context.Context, ext *abep.Extension) {
+			Run: func(runCtx context.Context, ext *extension.Extension) {
 				s.ext = ext
 				log.Info("listening", "port", env.Or("ZERGX_PORT", "8080"), "nats", natsURL)
 				go runReconciler(runCtx, s, time.Duration(env.Int("ZERGX_RECONCILE_INTERVAL_SECS", 60))*time.Second)

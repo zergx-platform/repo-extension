@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 
-	abep "abep.dev/sdk"
+	abcprotocol "forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/naming"
 )
 
 // handleLifecycleEvent mirrors one agent lifecycle event into the workspace
 // layer. Every step is idempotent: redeliveries (at-least-once) converge.
-func (s *server) handleLifecycleEvent(ctx context.Context, event string, env abep.LifecycleEvent) error {
+func (s *server) handleLifecycleEvent(ctx context.Context, event string, env abcprotocol.LifecycleEvent) error {
 	var err error
 	switch event {
 	case "created":
@@ -23,9 +23,9 @@ func (s *server) handleLifecycleEvent(ctx context.Context, event string, env abe
 		if !ok {
 			return errBad("session %q does not match org:repo:bookmark naming — ignoring", env.SessionName)
 		}
-		err = s.ensureForked(ctx, org, repo, bm, env.SessionName, env.Parent)
+		err = s.ensureForked(ctx, org, repo, bm, env.SessionName, strp(env.Parent))
 	case "renamed":
-		err = s.ensureRenamed(ctx, env.From, env.To)
+		err = s.ensureRenamed(ctx, strp(env.From), strp(env.To))
 	case "deleted":
 		err = s.ensureDeleted(ctx, env.SessionName)
 	default:
@@ -43,7 +43,9 @@ func (s *server) handleLifecycleEvent(ctx context.Context, event string, env abe
 	}
 	sid := env.SessionName
 	if event == "forked" || event == "renamed" {
-		sid = env.To
+		if t := strp(env.To); t != "" {
+			sid = t
+		}
 	}
 	s.publishSessionVars(ctx, s.ext, sid)
 	return nil
@@ -173,4 +175,12 @@ func (s *server) ensureBookmarkAnchored(ctx context.Context, org, repo, bm strin
 		anchor = "" // jj resolves "" as the repo head
 	}
 	return s.jj.EnsureBookmark(ctx, org, repo, anchor, bm)
+}
+
+// strp safely derefs the optional lifecycle fields (parent/from/to).
+func strp(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

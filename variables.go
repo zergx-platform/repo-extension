@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	abep "abep.dev/sdk"
+	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/extension"
 )
 
 // resolveOrg/resolveRepo/resolveBookmark are the authoritative lazy resolvers
@@ -30,7 +30,7 @@ func (s *server) resolveBookmark(ctx context.Context, sessionName string) (strin
 // publishSessionVars projects the session's org/repo/bookmark into the shared
 // KV (vars.repo.{token}.*) after the authoritative mapping changed. Called by
 // the lifecycle handler; the reconciler additionally rebuilds projections.
-func (s *server) publishSessionVars(ctx context.Context, ext *abep.Extension, sessionName string) {
+func (s *server) publishSessionVars(ctx context.Context, ext *extension.Extension, sessionName string) {
 	o, r, b, err := s.resolveSession(ctx, sessionName)
 	if err != nil {
 		return
@@ -41,6 +41,6 @@ func (s *server) publishSessionVars(ctx context.Context, ext *abep.Extension, se
 }
 
 // clearSessionVars removes a session's projected variables on deletion.
-func (s *server) clearSessionVars(ctx context.Context, ext *abep.Extension, sessionName string) {
+func (s *server) clearSessionVars(ctx context.Context, ext *extension.Extension, sessionName string) {
 	_ = ext.DeleteSessionVariables(ctx, sessionName)
 }
