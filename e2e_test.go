@@ -158,7 +158,7 @@ func TestExploreWire(t *testing.T) {
 	if err != nil {
 		t.Fatalf("explore wire: %v", err)
 	}
-	if !strings.Contains(*res.Content, "acme") || !strings.Contains(*res.Content, "api") {
-		t.Fatalf("explore content = %q", *res.Content)
+	if !strings.Contains(res.Content, "acme") || !strings.Contains(res.Content, "api") {
+		t.Fatalf("explore content = %q", res.Content)
 	}
 }
