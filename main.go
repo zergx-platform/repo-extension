@@ -42,7 +42,7 @@ func main() {
 		base:  env.Or("ZERGX_REPO_MANAGER_URL", "http://jjlab.zergx.svc.cluster.local:80"),
 		agent: env.Or("ZERGX_AGENT_URL", "http://agent.zergx.svc.cluster.local:80"),
 	}
-	s.jj = newJJClient(s.base)
+	s.jj = newJJClient(s.base, env.Or("JJLAB_TOKEN", env.Or("ZERGX_JJLAB_TOKEN", "devtoken")))
 	s.ag = newAgentClient(s.agent)
 	s.cache = newSessCache(5 * time.Second)
 

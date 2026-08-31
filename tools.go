@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -14,40 +13,46 @@ import (
 	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/httpx"
 )
 
-// tools returns the repo tools, forwarding each to the jjlab Contents API.
-// handlers returns the repo tool handlers, forwarding each to the jjlab
-// Contents API. Descriptions/schemas live in manifest.yaml (the single
+// handlers binds each repo tool to its implementation, forwarding to the
+// jjlab REST surface. Descriptions/schemas live in manifest.yaml (the single
 // declarative protocol source); each handler is bound by tool name.
 func (s *server) handlers() map[string]extension.ToolSpec {
+	// contentsPath addresses a file at the session bookmark via the
+	// Gitea-style `?ref=` snapshot query.
 	contentsPath := func(o, r, b, path string) string {
-		return s.base + "/api/v1/repos/" + url.PathEscape(o) + "/" + url.PathEscape(r) + "/" +
-			url.PathEscape(b) + "/contents/" + escPath(path)
+		return "/api/v1/repos/" + url.PathEscape(o) + "/" + url.PathEscape(r) +
+			"/contents/" + escPath(path) + "?ref=" + url.QueryEscape(b)
 	}
 
-	// readFileRaw fetches the file; returns (raw utf8, sha, size) or error.
+	// readFileRaw fetches a file and returns (raw utf8, sha, size) or error.
+	// jjlab responds with `encoding: base64` + base64 `content` (Gitea shape),
+	// never with a plain-text body.
 	readFileRaw := func(ctx context.Context, o, r, b, path string) (string, string, int64, error) {
-		v, err := httpx.Get(ctx, contentsPath(o, r, b, path))
+		v, err := s.jj.get(ctx, contentsPath(o, r, b, path))
 		if err != nil {
 			return "", "", 0, err
 		}
-		enc, _ := v["encoding"].(string)
 		rawContent, _ := v["content"].(string)
-		var text string
-		if enc == "base64" {
-			raw, derr := base64.StdEncoding.DecodeString(rawContent)
-			if derr != nil {
-				return "", "", 0, fmt.Errorf("failed to base64-decode file content")
-			}
-			text = string(raw)
-		} else {
-			text = rawContent
+		raw, derr := base64.StdEncoding.DecodeString(rawContent)
+		if derr != nil {
+			return "", "", 0, fmt.Errorf("failed to base64-decode file content")
 		}
+		text := string(raw)
 		sha, _ := v["sha"].(string)
 		size := int64(len(text))
 		if sz, ok := v["size"].(float64); ok {
 			size = int64(sz)
 		}
 		return text, sha, size, nil
+	}
+
+	// fileBody builds the Gitea-style write body: base64 content + branch.
+	fileBody := func(b, content, message string) map[string]interface{} {
+		return map[string]interface{}{
+			"content_base64": base64.StdEncoding.EncodeToString([]byte(content)),
+			"branch":         b,
+			"message":        message,
+		}
 	}
 
 	return map[string]extension.ToolSpec{
@@ -63,9 +68,6 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				text, sha, size, err := readFileRaw(ctx, o, r, b, path)
 				if err != nil {
-					// 404 keeps the agent-friendly wording; any other
-					// failure (5xx, timeout, bad body) is a real error so
-					// the agent never mistakes an outage for a missing file.
 					if errors.Is(err, httpx.ErrNotFound) {
 						return extension.ToolResultData{Content: fmt.Sprintf("failed to read file '%s': not found or inaccessible", path)}, nil
 					}
@@ -78,7 +80,6 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 
 				lines := strings.Split(text, "\n")
-				// strip trailing empty line from split (a trailing \n yields a final "")
 				if len(lines) > 0 && lines[len(lines)-1] == "" {
 					lines = lines[:len(lines)-1]
 				}
@@ -86,7 +87,6 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 
 				startIdx := offset - 1
 				if startIdx > int64(len(lines)) {
-					// offset beyond EOF
 					return extension.ToolResultData{Content: fmt.Sprintf("file '%s' has %d lines; offset=%d is past the end.", path, totalLines, offset), Data: map[string]interface{}{
 						"path": path, "sha": sha, "size": size, "total_lines": totalLines, "truncated": false,
 					}}, nil
@@ -114,11 +114,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 
 				meta := map[string]interface{}{
-					"path":        path,
-					"sha":         sha,
-					"size":        size,
-					"total_lines": totalLines,
-					"truncated":   truncated,
+					"path": path, "sha": sha, "size": size, "total_lines": totalLines, "truncated": truncated,
 				}
 				if truncated {
 					meta["next_offset"] = nextOffset
@@ -141,19 +137,11 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if message == "" {
 					message = "write " + path
 				}
-				body := map[string]interface{}{
-					"content": base64.StdEncoding.EncodeToString([]byte(content)),
-					"message": message,
-				}
-				v, err := httpx.Put(ctx, contentsPath(o, r, b, path), body)
+				v, err := s.jj.put(ctx, contentsPath(o, r, b, path), fileBody(b, content, message))
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to write file: %w", err)
 				}
 				changeID := strVal(v, "change_id")
-				if changeID == "" {
-					// fall back to commit_id for older backend
-					changeID = strVal(v, "commit_id")
-				}
 				return extension.ToolResultData{Content: fmt.Sprintf("wrote file '%s' (change %s)", path, shortID(changeID)), Data: map[string]interface{}{
 					"path": path, "change_id": changeID,
 				}}, nil
@@ -173,14 +161,11 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if message == "" {
 					message = "delete " + path
 				}
-				v, err := httpx.Delete(ctx, contentsPath(o, r, b, path), map[string]interface{}{"message": message})
+				v, err := s.jj.delete(ctx, contentsPath(o, r, b, path), map[string]interface{}{"branch": b, "message": message})
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to delete file: %w", err)
 				}
 				changeID := strVal(v, "change_id")
-				if changeID == "" {
-					changeID = strVal(v, "commit_id")
-				}
 				return extension.ToolResultData{Content: fmt.Sprintf("deleted file '%s' (change %s)", path, shortID(changeID)), Data: map[string]interface{}{
 					"path": path, "change_id": changeID,
 				}}, nil
@@ -204,47 +189,24 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					message = "edit " + path
 				}
 
-				// 1. read + capture sha (read-before-edit check)
-				url := contentsPath(o, r, b, path)
-				cur, err := httpx.Get(ctx, url)
+				text, sha, _, err := readFileRaw(ctx, o, r, b, path)
 				if err != nil {
 					if errors.Is(err, httpx.ErrNotFound) {
 						return extension.ToolResultData{}, fmt.Errorf("failed to read file '%s': not found or inaccessible", path)
 					}
 					return extension.ToolResultData{}, fmt.Errorf("read '%s' before edit: %w", path, err)
 				}
-				sha := strVal(cur, "sha")
-				var current string
-				if enc, _ := cur["encoding"].(string); enc == "base64" {
-					raw, derr := base64.StdEncoding.DecodeString(strVal(cur, "content"))
-					if derr != nil {
-						return extension.ToolResultData{}, fmt.Errorf("failed to base64-decode file content")
-					}
-					current = string(raw)
-				} else {
-					current = strVal(cur, "content")
-				}
 
-				// 2. apply line edit
-				newContent, err := applyLineEdit(current, startLine, endLine, content)
+				newContent, err := applyLineEdit(text, startLine, endLine, content)
 				if err != nil {
 					return extension.ToolResultData{}, err
 				}
 
-				// 3. write back with sha CAS
-				body := map[string]interface{}{
-					"content": base64.StdEncoding.EncodeToString([]byte(newContent)),
-					"message": message,
-					"sha":     sha,
-				}
-				v, err := httpx.Put(ctx, url, body)
+				v, err := s.jj.put(ctx, contentsPath(o, r, b, path), fileBody(b, newContent, message))
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to write edited result: %w", err)
 				}
 				changeID := strVal(v, "change_id")
-				if changeID == "" {
-					changeID = strVal(v, "commit_id")
-				}
 
 				var desc string
 				if endLine < startLine {
@@ -264,13 +226,12 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if err != nil {
 					return extension.ToolResultData{}, err
 				}
-				v, err := httpx.Get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/tree")
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/tree/"+url.PathEscape(b))
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to list directory: %w", err)
 				}
 				entries := toEntries(v)
-				dirs := 0
-				files := 0
+				dirs, files := 0, 0
 				for _, e := range entries {
 					if e.isDir {
 						dirs++
@@ -300,8 +261,8 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if pattern == "" {
 					return extension.ToolResultData{}, fmt.Errorf("missing 'pattern' argument")
 				}
-				q := url.Values{"pattern": {pattern}}
-				v, err := httpx.Get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/search?"+q.Encode())
+				q := url.Values{"pattern": {pattern}, "ref": {b}}
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/search?"+q.Encode())
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("search failed: %w", err)
 				}
@@ -314,7 +275,6 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				for _, m := range matches {
 					fmt.Fprintf(&sb, "  %s\n", m)
 				}
-				// parse into structured matches
 				parsed := make([]interface{}, 0, len(matches))
 				for _, m := range matches {
 					path, line, text := splitMatch(m)
@@ -325,28 +285,32 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 		},
 		"explore": {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
-				v, err := httpx.Get(ctx, s.base+"/api/v1/repos")
+				tree, err := s.jj.GetRepoTree(ctx)
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to browse structure: %w", err)
 				}
-				orgs := toOrgs(v)
+				orgArg := abcprotocol.ArgString(args, "org")
+				repoArg := abcprotocol.ArgString(args, "repo")
+
 				var sb strings.Builder
-				if len(orgs) == 0 {
+				meta := []interface{}{}
+				for org, repos := range tree {
+					if orgArg != "" && org != orgArg {
+						continue
+					}
+					fmt.Fprintf(&sb, "organization '%s' (%d repo(s)):\n", org, len(repos))
+					rmeta := []interface{}{}
+					for repo, bms := range repos {
+						if repoArg != "" && repo != repoArg {
+							continue
+						}
+						fmt.Fprintf(&sb, "  - %s (branches: %s)\n", repo, strings.Join(bms, ", "))
+						rmeta = append(rmeta, map[string]interface{}{"repo": repo, "branches": bms})
+					}
+					meta = append(meta, map[string]interface{}{"org": org, "repos": rmeta})
+				}
+				if len(meta) == 0 {
 					return extension.ToolResultData{Content: "no organizations or repositories.", Data: map[string]interface{}{"orgs": []interface{}{}}}, nil
-				}
-				for _, o := range orgs {
-					fmt.Fprintf(&sb, "organization '%s' (%d repo(s)):\n", o.org, len(o.repos))
-					for _, r := range o.repos {
-						fmt.Fprintf(&sb, "  - %s (branches: %s)\n", r.repo, strings.Join(r.branches, ", "))
-					}
-				}
-				meta := make([]interface{}, 0, len(orgs))
-				for _, o := range orgs {
-					repos := make([]interface{}, 0, len(o.repos))
-					for _, r := range o.repos {
-						repos = append(repos, map[string]interface{}{"repo": r.repo, "branches": r.branches})
-					}
-					meta = append(meta, map[string]interface{}{"org": o.org, "repos": repos})
 				}
 				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"orgs": meta}}, nil
 			},
@@ -363,17 +327,15 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, fmt.Errorf("rev_a and rev_b are required")
 				}
 				path := abcprotocol.ArgString(args, "path")
-				q := url.Values{"rev_a": {revA}, "rev_b": {revB}}
-				if path != "" {
-					q.Set("path", path)
-				}
-				v, err := httpx.Get(ctx, s.base+"/api/v1/git-diff/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
+				q := url.Values{"base": {revA}, "head": {revB}}
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/compare?"+q.Encode())
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to get diff: %w", err)
 				}
 				diff := strVal(v, "diff")
 				scope := "tree"
 				if path != "" {
+					diff = diffForPath(diff, path)
 					scope = fmt.Sprintf("file '%s'", path)
 				}
 				if strings.TrimSpace(diff) == "" {
@@ -392,11 +354,8 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if source == "" {
 					return extension.ToolResultData{}, fmt.Errorf("missing 'source' argument")
 				}
-				// The destination is always this session's own branch (b): a tool
-				// must never move another branch's bookmark. The divergent commits
-				// of `source` are rebased onto `b`, and `b` advances.
 				body := map[string]interface{}{"source": source, "dest": b}
-				v, err := httpx.Post(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/rebase", body)
+				v, err := s.jj.post(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/rebase", body)
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("rebase failed: %w", err)
 				}
@@ -420,18 +379,14 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, fmt.Errorf("missing 'path' argument")
 				}
 				content := abcprotocol.ArgString(args, "content")
-				body := map[string]interface{}{"path": path, "content": content}
-				v, err := httpx.Post(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/resolve", body)
+				message := "resolve " + path
+				v, err := s.jj.put(ctx, contentsPath(o, r, b, path), fileBody(b, content, message))
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("resolve failed: %w", err)
 				}
-				sum, _ := v["resolve"].(map[string]interface{})
-				commitID := strVal(sum, "commit_id")
-				conflicts := strSlice(sum, "conflicts")
-				if len(conflicts) > 0 {
-					return extension.ToolResultData{Content: fmt.Sprintf("resolved '%s' (tip %s); remaining conflicts: %s", path, shortID(commitID), strings.Join(conflicts, ", ")), Data: map[string]interface{}{"commit_id": commitID, "conflicts": conflicts}}, nil
-				}
-				return extension.ToolResultData{Content: fmt.Sprintf("resolved '%s' (tip %s); no remaining conflicts.", path, shortID(commitID)), Data: map[string]interface{}{"commit_id": commitID, "conflicts": []interface{}{}}}, nil
+				commitID := strVal(v, "sha")
+				changeID := strVal(v, "change_id")
+				return extension.ToolResultData{Content: fmt.Sprintf("resolved '%s' (tip %s, change %s).", path, shortID(commitID), shortID(changeID)), Data: map[string]interface{}{"commit_id": commitID, "change_id": changeID, "conflicts": []interface{}{}}}, nil
 			},
 		},
 		"git-blame": {
@@ -442,19 +397,39 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				rev := abcprotocol.ArgString(args, "rev")
 				path := abcprotocol.ArgString(args, "path")
-				q := url.Values{"rev": {rev}, "path": {path}}
-				v, err := httpx.Get(ctx, s.base+"/api/v1/git-blame/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"?"+q.Encode())
+				if rev == "" {
+					rev = "main"
+				}
+				if path == "" {
+					return extension.ToolResultData{}, fmt.Errorf("missing 'path' argument")
+				}
+				q := url.Values{"rev": {rev}}
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/annotate/"+escPath(path)+"?"+q.Encode())
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to get blame: %w", err)
 				}
-				lines := strSlice(v, "blame")
+				anns := arraySlice(v["annotations"])
 				var sb strings.Builder
 				fmt.Fprintf(&sb, "per-line origin of file '%s':\n", path)
-				meta := make([]interface{}, 0, len(lines))
-				for _, line := range lines {
-					commit, text := splitBlame(line)
-					fmt.Fprintf(&sb, "  %s: %s\n", shortID(commit), text)
-					meta = append(meta, map[string]interface{}{"commit_id": commit, "content": text})
+				meta := make([]interface{}, 0, len(anns))
+				for _, a := range anns {
+					m, ok := a.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					commit := strFrom(m, "commit_id")
+					change := strFrom(m, "change_id")
+					content, _ := m["content"].(string)
+					// Show the change-id (the semantic unit) when available.
+					owner := change
+					if owner == "" {
+						owner = commit
+					}
+					fmt.Fprintf(&sb, "  %s: %s", shortID(owner), content)
+					if !strings.HasSuffix(content, "\n") {
+						fmt.Fprintln(&sb)
+					}
+					meta = append(meta, map[string]interface{}{"commit_id": commit, "change_id": change, "content": content})
 				}
 				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"lines": meta}}, nil
 			},
@@ -466,9 +441,13 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, err
 				}
 				limit := abcprotocol.ArgInt(args, "limit", 50)
-				q := url.Values{"limit": {fmt.Sprintf("%d", limit)}}
+				q := url.Values{"limit": {fmt.Sprintf("%d", limit)}, "page": {"1"}}
 				if rev := abcprotocol.ArgString(args, "rev"); rev != "" {
-					q.Set("rev", rev)
+					q.Set("sha", rev)
+				} else {
+					if b := abcprotocol.ArgString(args, "_branch"); b != "" {
+						q.Set("sha", b)
+					}
 				}
 				if since := abcprotocol.ArgString(args, "since"); since != "" {
 					q.Set("since", since)
@@ -476,7 +455,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if until := abcprotocol.ArgString(args, "until"); until != "" {
 					q.Set("until", until)
 				}
-				v, err := httpx.Get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/log?"+q.Encode())
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/commits?"+q.Encode())
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to get commit history: %w", err)
 				}
@@ -493,7 +472,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 						msg = "(no description)"
 					}
 					fmt.Fprintf(&sb, "  %s %s（%s）\n", shortID(c.changeID), msg, c.author)
-					meta = append(meta, map[string]interface{}{"change_id": c.changeID, "message": c.message, "author": c.author, "timestamp": c.timestamp})
+					meta = append(meta, map[string]interface{}{"change_id": c.changeID, "message": c.message, "author": c.author})
 				}
 				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"commits": meta}}, nil
 			},
@@ -505,11 +484,14 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, err
 				}
 				rev := abcprotocol.ArgString(args, "rev")
-				v, err := httpx.Get(ctx, s.base+"/api/v1/git-show/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(rev))
+				if rev == "" {
+					return extension.ToolResultData{}, fmt.Errorf("missing 'rev' argument")
+				}
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/git/commits/"+url.PathEscape(rev)+"/diff")
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to view change: %w", err)
 				}
-				patch := strVal(v, "patch")
+				patch := strVal(v, "diff")
 				if strings.TrimSpace(patch) == "" {
 					return extension.ToolResultData{Content: fmt.Sprintf("change '%s' has no content diff.", rev), Data: map[string]interface{}{"rev": rev}}, nil
 				}
@@ -522,7 +504,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if err != nil {
 					return extension.ToolResultData{}, err
 				}
-				v, err := httpx.Get(ctx, s.base+"/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/bookmarks")
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/branches")
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to list branches: %w", err)
 				}
@@ -544,8 +526,6 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 }
 
 // sessionBase resolves the (org, repo, bookmark) triple for a tool call.
-// Priority: the first-class `session_name` envelope field (resolved via the
-// mapping table) → legacy `_org`/`_repo`/`_branch` args.
 func (s *server) sessionBase(ctx context.Context, args map[string]interface{}, sessionName string) (string, string, string, error) {
 	if sessionName != "" {
 		return s.resolveSession(ctx, sessionName)
@@ -557,9 +537,8 @@ func (s *server) sessionBase(ctx context.Context, args map[string]interface{}, s
 	return o, r, b, nil
 }
 
-// sessionBaseXO is sessionBase with an explicit argument `org`/`repo` capable
-// of overriding the session workspace (read-only cross-repo access). The
-// bookmark still defaults to the workspace's branch when not passed.
+// sessionBaseXO is sessionBase with an explicit `org`/`repo`/`branch` override
+// (read-only cross-repo access); the bookmark still defaults to the workspace.
 func (s *server) sessionBaseXO(ctx context.Context, args map[string]interface{}, sessionName string) (string, string, string, error) {
 	o, r, b, err := s.sessionBase(ctx, args, sessionName)
 	if err != nil {
@@ -622,17 +601,15 @@ func strSlice(v map[string]interface{}, k string) []string {
 	return nil
 }
 
-// splitBlame splits "commitId content" into (commitId, content).
-func splitBlame(line string) (string, string) {
-	i := strings.IndexByte(line, ' ')
-	if i == -1 {
-		return line, ""
+func arraySlice(v interface{}) []interface{} {
+	if arr, ok := v.([]interface{}); ok {
+		return arr
 	}
-	return line[:i], line[i+1:]
+	return nil
 }
 
-// splitMatch splits "path:line:text" into (path, line, text). Line numbers may
-// be absent for some backends, in which case line=="".
+// splitMatch splits "path:line:text" into (path, line, text); line/text are
+// empty when the backend omits them.
 func splitMatch(m string) (string, string, string) {
 	i := strings.IndexByte(m, ':')
 	if i == -1 {
@@ -645,6 +622,23 @@ func splitMatch(m string) (string, string, string) {
 		return path, "", rest
 	}
 	return path, rest[:j], rest[j+1:]
+}
+
+// diffForPath filters a unified diff down to the entries for a single path.
+// The backend's `compare` returns a whole-tree patch; Gitea has no path filter
+// on compare, so the tool narrows client-side.
+func diffForPath(diff, path string) string {
+	header := "a/" + path + " b/" + path
+	var out []string
+	for _, block := range strings.Split(diff, "\ndiff --git ") {
+		trimmed := block
+		if i := strings.Index(trimmed, "\n"); i >= 0 {
+			if trimmed[:i] == header {
+				out = append(out, "diff --git "+trimmed)
+			}
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 type entry struct {
@@ -666,7 +660,7 @@ func toEntries(v map[string]interface{}) []entry {
 		}
 		p, _ := m["path"].(string)
 		isDir := false
-		if t, _ := m["type"].(string); t == "tree" {
+		if k, _ := m["kind"].(string); k == "tree" {
 			isDir = true
 		}
 		var size int64
@@ -690,59 +684,10 @@ func entriesSlice(entries []entry) []interface{} {
 	return out
 }
 
-type orgInfo struct {
-	org   string
-	repos []repoInfo
-}
-
-type repoInfo struct {
-	repo     string
-	branches []string
-}
-
-func toOrgs(v map[string]interface{}) []orgInfo {
-	arr, ok := v["orgs"].([]interface{})
-	if !ok {
-		return nil
-	}
-	out := make([]orgInfo, 0, len(arr))
-	for _, e := range arr {
-		om, ok := e.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		org, _ := om["org"].(string)
-		oi := orgInfo{org: org}
-		if repos, ok := om["repos"].([]interface{}); ok {
-			for _, re := range repos {
-				rm, ok := re.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				repo, _ := rm["repo"].(string)
-				ri := repoInfo{repo: repo}
-				if bms, ok := rm["bookmarks"].([]interface{}); ok {
-					for _, bme := range bms {
-						if bm, ok := bme.(map[string]interface{}); ok {
-							if b, ok := bm["branch"].(string); ok {
-								ri.branches = append(ri.branches, b)
-							}
-						}
-					}
-				}
-				oi.repos = append(oi.repos, ri)
-			}
-		}
-		out = append(out, oi)
-	}
-	return out
-}
-
 type commitInfo struct {
-	changeID  string
-	message   string
-	author    string
-	timestamp string
+	changeID string
+	message  string
+	author   string
 }
 
 func toCommits(v map[string]interface{}) []commitInfo {
@@ -757,10 +702,9 @@ func toCommits(v map[string]interface{}) []commitInfo {
 			continue
 		}
 		out = append(out, commitInfo{
-			changeID:  strFrom(m, "change_id"),
-			message:   strFrom(m, "message"),
-			author:    strFrom(m, "author"),
-			timestamp: strFrom(m, "timestamp"),
+			changeID: strFrom(m, "change_id"),
+			message:  strFrom(m, "description"),
+			author:   strFrom(m, "author"),
 		})
 	}
 	return out
@@ -772,7 +716,7 @@ type branchInfo struct {
 }
 
 func toBranches(v map[string]interface{}) []branchInfo {
-	arr, ok := v["bookmarks"].([]interface{})
+	arr, ok := v["branches"].([]interface{})
 	if !ok {
 		return nil
 	}
@@ -783,8 +727,8 @@ func toBranches(v map[string]interface{}) []branchInfo {
 			continue
 		}
 		out = append(out, branchInfo{
-			branch: strFrom(m, "branch"),
-			target: strFrom(m, "target"),
+			branch: strFrom(m, "name"),
+			target: strFrom(m, "sha"),
 		})
 	}
 	return out
@@ -798,8 +742,8 @@ func strFrom(m map[string]interface{}, k string) string {
 }
 
 // applyLineEdit applies a line-based insert/replace to `current`, mirroring the
-// original Rust edit tool semantics. start_line is 1-based; end_line <
-// start_line means insert before start_line.
+// original editor tools. start_line is 1-based; end_line < start_line means
+// insert before start_line.
 func applyLineEdit(current string, startLine, endLine int64, content string) (string, error) {
 	endsNewline := strings.HasSuffix(current, "\n")
 	body := strings.TrimSuffix(current, "\n")
@@ -850,6 +794,3 @@ func applyLineEdit(current string, startLine, endLine int64, content string) (st
 	}
 	return joined, nil
 }
-
-// helper to silence unused import if needed
-var _ = json.MarshalIndent

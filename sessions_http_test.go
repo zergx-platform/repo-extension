@@ -41,59 +41,39 @@ func newFakeJJ() *fakeJJ {
 		orgs := []interface{}{}
 		for org, repos := range f.repos {
 			rl := []interface{}{}
-			for repo, bms := range repos {
-				bl := []interface{}{}
-				for _, b := range bms {
-					bl = append(bl, map[string]interface{}{"branch": b})
-				}
-				rl = append(rl, map[string]interface{}{"repo": repo, "bookmarks": bl})
+			for repo := range repos {
+				rl = append(rl, map[string]interface{}{"repo": repo, "default_bookmark": "main"})
 			}
 			orgs = append(orgs, map[string]interface{}{"org": org, "repos": rl})
 		}
 		writeTestJSON(w, 200, map[string]interface{}{"orgs": orgs})
 	})
-	mux.HandleFunc("/api/v1/repos/ensure-org", func(w http.ResponseWriter, r *http.Request) {
-		var b map[string]interface{}
-		_ = json.NewDecoder(r.Body).Decode(&b)
-		org, _ := b["org"].(string)
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		if f.repos[org] == nil {
-			f.repos[org] = map[string][]string{}
-		}
-		writeTestJSON(w, 200, map[string]interface{}{"ok": true})
-	})
-	mux.HandleFunc("/api/v1/repos/ensure", func(w http.ResponseWriter, r *http.Request) {
-		var b map[string]interface{}
-		_ = json.NewDecoder(r.Body).Decode(&b)
-		org, _ := b["org"].(string)
-		repo, _ := b["repo"].(string)
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		if f.repos[org] == nil {
-			f.repos[org] = map[string][]string{}
-		}
-		if _, ok := f.repos[org][repo]; !ok {
-			f.repos[org][repo] = []string{"main"}
-		}
-		writeTestJSON(w, 200, map[string]interface{}{"ok": true})
-	})
-	// DELETE /api/v1/repos/{org}/{repo}/{bm} + GET .../tree/{rev}
-	// (same "/api/v1/repos/" pattern as the bookmarks handler above, so the
-	// bookmarks branch is folded into this single handler).
+	// POST /api/v1/repos/{org}/{repo} — create repo (or 409 if it exists).
 	mux.HandleFunc("/api/v1/repos/", func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/repos/"), "/")
-		if r.Method == http.MethodPost && len(parts) == 3 && parts[2] == "bookmarks" {
+		switch {
+		case r.Method == http.MethodPost && len(parts) == 2:
+			org, repo := parts[0], parts[1]
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.repos[org] == nil {
+				f.repos[org] = map[string][]string{}
+			}
+			if _, ok := f.repos[org][repo]; !ok {
+				f.repos[org][repo] = []string{"main"}
+			}
+			writeTestJSON(w, 201, map[string]interface{}{"full_name": org + "/" + repo})
+		// POST /branches/{bm} {target: src}; DELETE /branches/{bm}.
+		case r.Method == http.MethodPost && len(parts) == 4 && parts[2] == "branches":
 			var b map[string]interface{}
 			_ = json.NewDecoder(r.Body).Decode(&b)
-			org, repo := parts[0], parts[1]
-			src, _ := b["rev"].(string)
-			nb, _ := b["branch"].(string)
+			org, repo, nb := parts[0], parts[1], parts[3]
+			src, _ := b["target"].(string)
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			bms, ok := f.repos[org][repo]
 			if !ok {
-				writeTestJSON(w, 500, map[string]interface{}{"ok": false, "error": "no repo"})
+				writeTestJSON(w, 404, map[string]interface{}{"ok": false, "error": "no repo"})
 				return
 			}
 			found := src == "" // "" resolves to head
@@ -105,17 +85,14 @@ func newFakeJJ() *fakeJJ {
 				}
 			}
 			if !found {
-				writeTestJSON(w, 500, map[string]interface{}{"ok": false, "error": "cannot resolve " + src})
+				writeTestJSON(w, 422, map[string]interface{}{"ok": false, "error": "cannot resolve " + src})
 				return
 			}
 			f.anchor[org+"/"+repo+"/"+nb] = src
 			f.repos[org][repo] = append(bms, nb)
-			writeTestJSON(w, 200, map[string]interface{}{"ok": true, "branch": nb})
-			return
-		}
-		switch {
-		case r.Method == http.MethodDelete && len(parts) == 3:
-			org, repo, bm := parts[0], parts[1], parts[2]
+			writeTestJSON(w, 200, map[string]interface{}{"ok": true, "sha": "hash"})
+		case r.Method == http.MethodDelete && len(parts) == 4 && parts[2] == "branches":
+			org, repo, bm := parts[0], parts[1], parts[3]
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			var out []string
@@ -125,7 +102,17 @@ func newFakeJJ() *fakeJJ {
 				}
 			}
 			f.repos[org][repo] = out
-			writeTestJSON(w, 200, map[string]interface{}{"deleted": 1})
+			writeTestJSON(w, 204, map[string]interface{}{"ok": true})
+		// GET /branches and GET /tree/{rev}.
+		case r.Method == http.MethodGet && len(parts) == 3 && parts[2] == "branches":
+			org, repo := parts[0], parts[1]
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			bl := []interface{}{}
+			for _, b := range f.repos[org][repo] {
+				bl = append(bl, map[string]interface{}{"name": b, "sha": "h"})
+			}
+			writeTestJSON(w, 200, map[string]interface{}{"branches": bl})
 		case r.Method == http.MethodGet && len(parts) == 4 && parts[2] == "tree":
 			org, repo, rev := parts[0], parts[1], parts[3]
 			f.mu.Lock()
@@ -265,7 +252,7 @@ func newTestServer(t *testing.T, jj *fakeJJ, ag *fakeAgent, store *Store) *serve
 		agent: ag.URL(),
 		store: store,
 		cache: newSessCache(50 * time.Millisecond),
-		jj:    newJJClient(jj.URL()),
+		jj:    newJJClient(jj.URL(), "test-token"),
 		ag:    newAgentClient(ag.URL()),
 	}
 }

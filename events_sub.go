@@ -58,9 +58,6 @@ func (s *server) ensureCreated(ctx context.Context, org, repo, bm, sid string) e
 	} else if row != nil {
 		return nil // already mirrored
 	}
-	if err := s.jj.EnsureOrg(ctx, org); err != nil {
-		return err
-	}
 	if err := s.jj.EnsureRepo(ctx, org, repo); err != nil {
 		return err
 	}

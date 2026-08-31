@@ -73,7 +73,7 @@ func TestDoJSONEmptyBodyOK(t *testing.T) {
 func TestReadTool404Vs500(t *testing.T) {
 	mode := "404"
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/repos/o/r/main/contents/f.txt", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/api/v1/repos/o/r/contents/f.txt", func(w http.ResponseWriter, _ *http.Request) {
 		switch mode {
 		case "500":
 			w.WriteHeader(http.StatusInternalServerError)
@@ -86,7 +86,7 @@ func TestReadTool404Vs500(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	s := &server{base: srv.URL}
+	s := &server{base: srv.URL, jj: newJJClient(srv.URL, "t")}
 	h := s.handlers()["read"]
 	exec := func() (string, error) {
 		res, err := h.Execute(context.Background(),

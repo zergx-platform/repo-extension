@@ -74,7 +74,7 @@ func TestManifestBinding(t *testing.T) {
 
 // manifestHandlers returns the handler map without needing a live server.
 func manifestHandlers() map[string]extension.ToolSpec {
-	return (&server{}).handlers()
+	return (&server{jj: newJJClient("http://unused", "t")}).handlers()
 }
 
 // ---- wire-level e2e over the inproc transport ----
@@ -140,10 +140,9 @@ func TestExploreWire(t *testing.T) {
 		}
 		resp.Body.Close()
 	}
-	post("/api/v1/repos/ensure-org", map[string]interface{}{"org": "acme"})
-	post("/api/v1/repos/ensure", map[string]interface{}{"org": "acme", "repo": "api"})
+	post("/api/v1/repos/acme/api", map[string]interface{}{"default_branch": "main"})
 
-	s := &server{base: jj.URL()}
+	s := &server{base: jj.URL(), jj: newJJClient(jj.URL(), "t")}
 
 	m, err := manifest.ParseManifest(manifestYaml)
 	if err != nil {
