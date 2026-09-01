@@ -262,7 +262,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, fmt.Errorf("missing 'pattern' argument")
 				}
 				q := url.Values{"pattern": {pattern}, "ref": {b}}
-				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/"+url.PathEscape(b)+"/search?"+q.Encode())
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/search?"+q.Encode())
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("search failed: %w", err)
 				}
@@ -487,7 +487,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if rev == "" {
 					return extension.ToolResultData{}, fmt.Errorf("missing 'rev' argument")
 				}
-				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/git/commits/"+url.PathEscape(rev)+"/diff")
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/commits/"+url.PathEscape(rev)+"/diff")
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to view change: %w", err)
 				}
