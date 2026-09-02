@@ -11,8 +11,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/zergx-platform/repo-extension/internal/httpx"
 )
 
 // jjClient is a thin, status-aware client for the jjlab REST API.
@@ -315,7 +313,7 @@ func (c *jjClient) doJSON(req *http.Request) (map[string]interface{}, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("%s %s: %w", req.Method, req.URL.Path, httpx.ErrNotFound)
+		return nil, fmt.Errorf("%s %s: %w", req.Method, req.URL.Path, errNotFoundForHTTP)
 	}
 	if resp.StatusCode >= 400 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))

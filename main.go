@@ -13,7 +13,6 @@ import (
 	"github.com/abcp-sdk/abc-protocol-go/extension"
 	"github.com/abcp-sdk/abc-protocol-go/manifest"
 	natsbus "github.com/abcp-sdk/abc-protocol-go/transport/nats"
-	"github.com/zergx-platform/repo-extension/internal/env"
 )
 
 //go:embed manifest.yaml
@@ -39,10 +38,10 @@ type server struct {
 func main() {
 	log := slog.Default().With("svc", "repo-extension")
 	s := &server{
-		base:  env.Or("ZERGX_REPO_MANAGER_URL", "http://jjlab.zergx.svc.cluster.local:80"),
-		agent: env.Or("ZERGX_AGENT_URL", "http://agent.zergx.svc.cluster.local:80"),
+		base:  envOr("ZERGX_REPO_MANAGER_URL", "http://jjlab.zergx.svc.cluster.local:80"),
+		agent: envOr("ZERGX_AGENT_URL", "http://agent.zergx.svc.cluster.local:80"),
 	}
-	s.jj = newJJClient(s.base, env.Or("JJLAB_TOKEN", env.Or("ZERGX_JJLAB_TOKEN", "devtoken")))
+	s.jj = newJJClient(s.base, envOr("JJLAB_TOKEN", envOr("ZERGX_JJLAB_TOKEN", "devtoken")))
 	s.ag = newAgentClient(s.agent)
 	s.cache = newSessCache(5 * time.Second)
 
@@ -57,7 +56,7 @@ func main() {
 	s.store = store
 	defer store.Close()
 
-	natsURL := env.Or("NATS_URL", "nats://nats.zergx.svc.cluster.local:4222")
+	natsURL := envOr("NATS_URL", "nats://nats.zergx.svc.cluster.local:4222")
 
 	nbus, err := natsbus.Connect(natsURL)
 	if err != nil {
@@ -87,8 +86,8 @@ func main() {
 			Handler: s.router(),
 			Run: func(runCtx context.Context, ext *extension.Extension) {
 				s.ext = ext
-				log.Info("listening", "port", env.Or("ZERGX_PORT", "8080"), "nats", natsURL)
-				go runReconciler(runCtx, s, time.Duration(env.Int("ZERGX_RECONCILE_INTERVAL_SECS", 60))*time.Second)
+				log.Info("listening", "port", envOr("ZERGX_PORT", "8080"), "nats", natsURL)
+				go runReconciler(runCtx, s, time.Duration(envInt("ZERGX_RECONCILE_INTERVAL_SECS", 60))*time.Second)
 			},
 		},
 	); err != nil {
@@ -99,10 +98,10 @@ func main() {
 
 func pgConfig() PgConfig {
 	return PgConfig{
-		Host:     env.Or("POSTGRES_HOST", "postgres.zergx.svc.cluster.local"),
-		Port:     env.NormalizePort(env.Or("POSTGRES_PORT", "5432")),
-		User:     env.Or("POSTGRES_USER", "root"),
-		Password: env.Or("POSTGRES_PASSWORD", "devpassword"),
-		DB:       env.Or("POSTGRES_DB_REPOEXT", "zergx_repoext"),
+		Host:     envOr("POSTGRES_HOST", "postgres.zergx.svc.cluster.local"),
+		Port:     envNormalizePort(envOr("POSTGRES_PORT", "5432")),
+		User:     envOr("POSTGRES_USER", "root"),
+		Password: envOr("POSTGRES_PASSWORD", "devpassword"),
+		DB:       envOr("POSTGRES_DB_REPOEXT", "zergx_repoext"),
 	}
 }

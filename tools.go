@@ -10,7 +10,6 @@ import (
 
 	abcprotocol "github.com/abcp-sdk/abc-protocol-go"
 	"github.com/abcp-sdk/abc-protocol-go/extension"
-	"github.com/zergx-platform/repo-extension/internal/httpx"
 )
 
 // handlers binds each repo tool to its implementation, forwarding to the
@@ -68,7 +67,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				text, sha, size, err := readFileRaw(ctx, o, r, b, path)
 				if err != nil {
-					if errors.Is(err, httpx.ErrNotFound) {
+					if errors.Is(err, errNotFoundForHTTP) {
 						return extension.ToolResultData{Content: fmt.Sprintf("failed to read file '%s': not found or inaccessible", path)}, nil
 					}
 					return extension.ToolResultData{}, fmt.Errorf("read '%s': %w", path, err)
@@ -191,7 +190,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 
 				text, sha, _, err := readFileRaw(ctx, o, r, b, path)
 				if err != nil {
-					if errors.Is(err, httpx.ErrNotFound) {
+					if errors.Is(err, errNotFoundForHTTP) {
 						return extension.ToolResultData{}, fmt.Errorf("failed to read file '%s': not found or inaccessible", path)
 					}
 					return extension.ToolResultData{}, fmt.Errorf("read '%s' before edit: %w", path, err)

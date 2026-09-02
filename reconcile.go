@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/zergx-platform/repo-extension/internal/naming"
 	"time"
 )
 
@@ -125,7 +124,7 @@ func backfillWorkspaces(ctx context.Context, s *server, sessions map[string]bool
 		if mapped[name] {
 			continue
 		}
-		org, repo, bm, ok := naming.Parse(name)
+		org, repo, bm, ok := parseSession(name)
 		if !ok {
 			continue // non-workspace session (e.g. "hi") — not our contract
 		}
