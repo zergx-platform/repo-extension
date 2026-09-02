@@ -38,7 +38,7 @@ type server struct {
 func main() {
 	log := slog.Default().With("svc", "repo-extension")
 	s := &server{
-		base:  envOr("ZERGX_REPO_MANAGER_URL", "http://jjlab.zergx.svc.cluster.local:80"),
+		base:  envOr("ZERGX_JJ_SERVER_URL", envOr("ZERGX_REPO_MANAGER_URL", "http://jj-lab.temp.svc.cluster.local:80")),
 		agent: envOr("ZERGX_AGENT_URL", "http://agent.zergx.svc.cluster.local:80"),
 	}
 	s.jj = newJJClient(s.base, envOr("JJLAB_TOKEN", envOr("ZERGX_JJLAB_TOKEN", "devtoken")))
