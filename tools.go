@@ -54,6 +54,17 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 		}
 	}
 
+	// fileBodySha is fileBody plus an optimistic-lock base blob sha (GitHub
+	// contents semantics): the caller passes the blob sha it read; jjlab
+	// rejects the write (409) when the file changed concurrently.
+	fileBodySha := func(b, content, message, sha string) map[string]interface{} {
+		body := fileBody(b, content, message)
+		if sha != "" {
+			body["sha"] = sha
+		}
+		return body
+	}
+
 	return map[string]extension.ToolSpec{
 		"read": {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
@@ -68,7 +79,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				text, sha, size, err := readFileRaw(ctx, o, r, b, path)
 				if err != nil {
 					if errors.Is(err, errNotFoundForHTTP) {
-						return extension.ToolResultData{Content: fmt.Sprintf("failed to read file '%s': not found or inaccessible", path)}, nil
+						return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("failed to read file '%s': not found or inaccessible", path), fmt.Sprintf("读取文件 '%s' 失败：未找到或不可访问", path))}, nil
 					}
 					return extension.ToolResultData{}, fmt.Errorf("read '%s': %w", path, err)
 				}
@@ -86,7 +97,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 
 				startIdx := offset - 1
 				if startIdx > int64(len(lines)) {
-					return extension.ToolResultData{Content: fmt.Sprintf("file '%s' has %d lines; offset=%d is past the end.", path, totalLines, offset), Data: map[string]interface{}{
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("file '%s' has %d lines; offset=%d is past the end.", path, totalLines, offset), fmt.Sprintf("文件 '%s' 共 %d 行；offset=%d 已超出末尾。", path, totalLines, offset)), Data: map[string]interface{}{
 						"path": path, "sha": sha, "size": size, "total_lines": totalLines, "truncated": false,
 					}}, nil
 				}
@@ -136,13 +147,22 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if message == "" {
 					message = "write " + path
 				}
-				v, err := s.jj.put(ctx, contentsPath(o, r, b, path), fileBody(b, content, message))
+				// Optimistic-lock: read the file's current blob sha (if it
+				// exists) and pass it as the base so a concurrent change is
+				// rejected rather than silently overwritten. A new file passes
+				// no sha (jjlab treats missing base as "no lock").
+				baseSha := ""
+				if oldText, oldSha, _, rerr := readFileRaw(ctx, o, r, b, path); rerr == nil {
+					_ = oldText
+					baseSha = oldSha
+				}
+				v, err := s.jj.put(ctx, contentsPath(o, r, b, path), fileBodySha(b, content, message, baseSha))
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to write file: %w", err)
 				}
 				changeID := strVal(v, "change_id")
-				return extension.ToolResultData{Content: fmt.Sprintf("wrote file '%s' (change %s)", path, shortID(changeID)), Data: map[string]interface{}{
-					"path": path, "change_id": changeID,
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("wrote file '%s' (change %s)", path, shortID(changeID)), fmt.Sprintf("已写入文件 '%s'（变更 %s）", path, shortID(changeID))), Data: map[string]interface{}{
+					"path": path, "change_id": changeID, "base_sha": baseSha,
 				}}, nil
 			},
 		},
@@ -160,13 +180,23 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if message == "" {
 					message = "delete " + path
 				}
-				v, err := s.jj.delete(ctx, contentsPath(o, r, b, path), map[string]interface{}{"branch": b, "message": message})
+				// Optimistic-lock base: read the file's current blob sha so a
+				// concurrent change/replacement is rejected (409) not clobbered.
+				baseSha := ""
+				if _, oldSha, _, rerr := readFileRaw(ctx, o, r, b, path); rerr == nil {
+					baseSha = oldSha
+				}
+				body := map[string]interface{}{"branch": b, "message": message}
+				if baseSha != "" {
+					body["sha"] = baseSha
+				}
+				v, err := s.jj.delete(ctx, contentsPath(o, r, b, path), body)
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to delete file: %w", err)
 				}
 				changeID := strVal(v, "change_id")
-				return extension.ToolResultData{Content: fmt.Sprintf("deleted file '%s' (change %s)", path, shortID(changeID)), Data: map[string]interface{}{
-					"path": path, "change_id": changeID,
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("deleted file '%s' (change %s)", path, shortID(changeID)), fmt.Sprintf("已删除文件 '%s'（变更 %s）", path, shortID(changeID))), Data: map[string]interface{}{
+					"path": path, "change_id": changeID, "base_sha": baseSha,
 				}}, nil
 			},
 		},
@@ -201,7 +231,9 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, err
 				}
 
-				v, err := s.jj.put(ctx, contentsPath(o, r, b, path), fileBody(b, newContent, message))
+				// Optimistic-lock: pass the blob sha we read as the base so a
+				// concurrent edit is rejected (409) instead of clobbered.
+				v, err := s.jj.put(ctx, contentsPath(o, r, b, path), fileBodySha(b, newContent, message, sha))
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to write edited result: %w", err)
 				}
@@ -213,9 +245,9 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				} else {
 					desc = fmt.Sprintf("replaced lines %d-%d", startLine, endLine)
 				}
-				return extension.ToolResultData{Content: fmt.Sprintf("edited file '%s': %s (change %s)", path, desc, shortID(changeID)), Data: map[string]interface{}{
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("edited file '%s': %s (change %s)", path, desc, shortID(changeID)), fmt.Sprintf("已编辑文件 '%s'：%s（变更 %s）", path, desc, shortID(changeID))), Data: map[string]interface{}{
 					"path": path, "start_line": startLine, "end_line": endLine,
-					"old_sha": sha, "change_id": changeID,
+					"old_sha": sha, "change_id": changeID, "diff": diffLines(text, newContent),
 				}}, nil
 			},
 		},
@@ -267,7 +299,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				matches := strSlice(v, "matches")
 				if len(matches) == 0 {
-					return extension.ToolResultData{Content: fmt.Sprintf("no matches for '%s' in branch '%s'.", b, pattern), Data: map[string]interface{}{"matches": []interface{}{}, "count": 0}}, nil
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("no matches for '%s' in branch '%s'.", b, pattern), fmt.Sprintf("在分支 '%s' 中未找到 '%s' 的匹配。", b, pattern)), Data: map[string]interface{}{"matches": []interface{}{}, "count": 0}}, nil
 				}
 				var sb strings.Builder
 				fmt.Fprintf(&sb, "found %d match(es):\n", len(matches))
@@ -309,7 +341,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					meta = append(meta, map[string]interface{}{"org": org, "repos": rmeta})
 				}
 				if len(meta) == 0 {
-					return extension.ToolResultData{Content: "no organizations or repositories.", Data: map[string]interface{}{"orgs": []interface{}{}}}, nil
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, "no organizations or repositories.", "没有组织或仓库。"), Data: map[string]interface{}{"orgs": []interface{}{}}}, nil
 				}
 				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"orgs": meta}}, nil
 			},
@@ -338,9 +370,9 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					scope = fmt.Sprintf("file '%s'", path)
 				}
 				if strings.TrimSpace(diff) == "" {
-					return extension.ToolResultData{Content: fmt.Sprintf("no diff between '%s' and '%s' (%s).", revA, revB, scope), Data: map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}}, nil
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("no diff between '%s' and '%s' (%s).", revA, revB, scope), fmt.Sprintf("'%s' 与 '%s' 之间无差异（%s）。", revA, revB, scope)), Data: map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}}, nil
 				}
-				return extension.ToolResultData{Content: fmt.Sprintf("diff (%s) between '%s'..'%s':\n%s", scope, revA, revB, diff), Data: map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}}, nil
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("diff (%s) between '%s'..'%s':\n%s", scope, revA, revB, diff), fmt.Sprintf("差异（%s）介于 '%s'..'%s'：\n%s", scope, revA, revB, diff)), Data: map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}}, nil
 			},
 		},
 		"git-rebase": {
@@ -360,11 +392,12 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				sum, _ := v["rebase"].(map[string]interface{})
 				commitID := strVal(sum, "commit_id")
+				changeID := strVal(sum, "change_id")
 				conflicts := strSlice(sum, "conflicts")
 				if len(conflicts) > 0 {
-					return extension.ToolResultData{Content: fmt.Sprintf("rebased '%s' onto '%s' with %d conflict(s): %s", source, b, len(conflicts), strings.Join(conflicts, ", ")), Data: map[string]interface{}{"commit_id": commitID, "conflicts": conflicts}}, nil
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("rebased '%s' onto '%s' with %d conflict(s): %s", source, b, len(conflicts), strings.Join(conflicts, ", ")), fmt.Sprintf("已将 '%s' 变基到 '%s' 上，共 %d 个冲突：%s", source, b, len(conflicts), strings.Join(conflicts, ", "))), Data: map[string]interface{}{"commit_id": commitID, "change_id": changeID, "conflicts": conflicts}}, nil
 				}
-				return extension.ToolResultData{Content: fmt.Sprintf("rebased '%s' onto '%s' (tip %s).", source, b, shortID(commitID)), Data: map[string]interface{}{"commit_id": commitID, "conflicts": []interface{}{}}}, nil
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("rebased '%s' onto '%s' (tip %s, change %s).", source, b, shortID(commitID), shortID(changeID)), fmt.Sprintf("已将 '%s' 变基到 '%s'（尖端 %s，变更 %s）。", source, b, shortID(commitID), shortID(changeID))), Data: map[string]interface{}{"commit_id": commitID, "change_id": changeID, "conflicts": []interface{}{}}}, nil
 			},
 		},
 		"git-resolve": {
@@ -385,7 +418,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				commitID := strVal(v, "sha")
 				changeID := strVal(v, "change_id")
-				return extension.ToolResultData{Content: fmt.Sprintf("resolved '%s' (tip %s, change %s).", path, shortID(commitID), shortID(changeID)), Data: map[string]interface{}{"commit_id": commitID, "change_id": changeID, "conflicts": []interface{}{}}}, nil
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("resolved '%s' (tip %s, change %s).", path, shortID(commitID), shortID(changeID)), fmt.Sprintf("已解析 '%s'（尖端 %s，变更 %s）。", path, shortID(commitID), shortID(changeID))), Data: map[string]interface{}{"commit_id": commitID, "change_id": changeID, "conflicts": []interface{}{}}}, nil
 			},
 		},
 		"git-blame": {
@@ -461,7 +494,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				commits := toCommits(v)
 				var sb strings.Builder
 				if len(commits) == 0 {
-					return extension.ToolResultData{Content: "no commits.", Data: map[string]interface{}{"commits": []interface{}{}}}, nil
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, "no commits.", "无提交。"), Data: map[string]interface{}{"commits": []interface{}{}}}, nil
 				}
 				fmt.Fprintf(&sb, "latest %d commit(s):\n", len(commits))
 				meta := make([]interface{}, 0, len(commits))
@@ -492,9 +525,9 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				patch := strVal(v, "diff")
 				if strings.TrimSpace(patch) == "" {
-					return extension.ToolResultData{Content: fmt.Sprintf("change '%s' has no content diff.", rev), Data: map[string]interface{}{"rev": rev}}, nil
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("change '%s' has no content diff.", rev), fmt.Sprintf("变更 '%s' 没有内容差异。", rev)), Data: map[string]interface{}{"rev": rev}}, nil
 				}
-				return extension.ToolResultData{Content: fmt.Sprintf("changes of '%s':\n%s", rev, patch), Data: map[string]interface{}{"rev": rev, "patch": patch}}, nil
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("changes of '%s':\n%s", rev, patch), fmt.Sprintf("'%s' 的变更：\n%s", rev, patch)), Data: map[string]interface{}{"rev": rev, "patch": patch}}, nil
 			},
 		},
 		"git-branches": {
@@ -510,7 +543,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				branches := toBranches(v)
 				var sb strings.Builder
 				if len(branches) == 0 {
-					return extension.ToolResultData{Content: "no branches.", Data: map[string]interface{}{"branches": []interface{}{}}}, nil
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, "no branches.", "无分支。"), Data: map[string]interface{}{"branches": []interface{}{}}}, nil
 				}
 				fmt.Fprintf(&sb, "branches (%d):\n", len(branches))
 				meta := make([]interface{}, 0, len(branches))
@@ -638,6 +671,50 @@ func diffForPath(diff, path string) string {
 		}
 	}
 	return strings.Join(out, "\n")
+}
+
+// diffLines produces a small unified diff between two file contents (by line),
+// or "" when identical. It is a best-effort tool-visible patch so the agent
+// sees exactly what changed on an edit/write. Symmetric add/remove of whole
+// lines; hunks are minimal (no context) to keep output compact.
+func diffLines(oldText, newText string) string {
+	if oldText == newText {
+		return ""
+	}
+	oldLines := strings.Split(strings.TrimSuffix(oldText, "\n"), "\n")
+	newLines := strings.Split(strings.TrimSuffix(newText, "\n"), "\n")
+	if len(oldLines) == 1 && oldLines[0] == "" {
+		oldLines = nil
+	}
+	if len(newLines) == 1 && newLines[0] == "" {
+		newLines = nil
+	}
+	var sb strings.Builder
+	sb.WriteString("--- a/file\n+++ b/file\n")
+	// Simple line diff via LCS-free common prefix/suffix trim for readability.
+	i := 0
+	for i < len(oldLines) && i < len(newLines) && oldLines[i] == newLines[i] {
+		i++
+	}
+	j := 0
+	for j < len(oldLines)-i && j < len(newLines)-i && oldLines[len(oldLines)-1-j] == newLines[len(newLines)-1-j] {
+		j++
+	}
+	del := oldLines[i : len(oldLines)-j]
+	add := newLines[i : len(newLines)-j]
+	start := i
+	oldEnd := i + len(del)
+	newEnd := i + len(add)
+	fmt.Fprintf(&sb, "@@ -%d,%d +%d,%d @@\n", start, len(del), start, len(add))
+	for _, l := range del {
+		sb.WriteString("-" + l + "\n")
+	}
+	for _, l := range add {
+		sb.WriteString("+" + l + "\n")
+	}
+	_ = oldEnd
+	_ = newEnd
+	return sb.String()
 }
 
 type entry struct {

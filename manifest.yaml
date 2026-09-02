@@ -8,15 +8,23 @@ variables:
   - name: org
     scope: session
     description: Organization of the current workspace (session variable, from the mapping table).
+    descriptions:
+      zh: "当前工作区的组织（会话变量，来自映射表）。"
   - name: repo
     scope: session
     description: Repository name of the current workspace (session variable, from the mapping table).
+    descriptions:
+      zh: "当前工作区的仓库名称（会话变量，来自映射表）。"
   - name: bookmark
     scope: session
     description: Branch/bookmark of the current workspace (session variable, from the mapping table).
+    descriptions:
+      zh: "当前工作区所在分支/书签（会话变量，来自映射表）。"
 tools:
   - name: read
     description: Read a file from the repository, returning line-numbered (1-based) content. Use offset/limit to read large files in segments.
+    descriptions:
+      zh: "读取仓库中的文件，返回带行号（从 1 开始）的内容。用 offset/limit 分段读取大文件。"
     input_schema:
       type: object
       properties:
@@ -32,6 +40,8 @@ tools:
       required: [path]
   - name: write
     description: Create or overwrite a file in the repository (committed as one change).
+    descriptions:
+      zh: "创建或覆盖仓库中的文件（作为一个变更提交）。"
     input_schema:
       type: object
       properties:
@@ -47,6 +57,8 @@ tools:
       required: [path, content]
   - name: delete
     description: Delete a file from the repository (committed as one change).
+    descriptions:
+      zh: "删除仓库中的文件（作为一个变更提交）。"
     input_schema:
       type: object
       properties:
@@ -59,6 +71,8 @@ tools:
       required: [path]
   - name: edit
     description: Replace or insert file content by line number. Reads and validates the current file first, applies the line edit, then writes back with sha verification to prevent clobbering concurrent edits.
+    descriptions:
+      zh: "按行号替换或插入文件内容。先读取并校验当前文件，应用行编辑，再带 sha 校验写回，防止并发编辑互相覆盖。"
     input_schema:
       type: object
       properties:
@@ -80,11 +94,15 @@ tools:
       required: [path, start_line, end_line, content]
   - name: ls
     description: List files and directories in the repository tree.
+    descriptions:
+      zh: "列出仓库目录树中的文件与目录。"
     input_schema:
       type: object
       properties: {}
   - name: grep
     description: Search file contents with a regular expression.
+    descriptions:
+      zh: "使用正则表达式搜索文件内容。"
     input_schema:
       type: object
       properties:
@@ -94,6 +112,8 @@ tools:
       required: [pattern]
   - name: explore
     description: Browse the organization/repository/branch structure.
+    descriptions:
+      zh: "浏览组织/仓库/分支结构。"
     input_schema:
       type: object
       properties:
@@ -105,6 +125,8 @@ tools:
           description: Repository name (omitted = list all repositories in the org).
   - name: git-rebase
     description: Rebase the commits unique to `source` onto this session's branch (the current workspace bookmark). The current branch advances (linear history; source change ids are preserved). The destination is always the session's own branch and cannot be overridden.
+    descriptions:
+      zh: "把 `source` 分支上独有的提交变基到本会话分支（当前工作区书签）上。当前分支向前推进（线性历史；保留源码 change id）。目标始终是本会话自己的分支，不可覆盖。"
     input_schema:
       type: object
       properties:
@@ -114,6 +136,8 @@ tools:
       required: [source]
   - name: git-resolve
     description: Resolve a conflict on this session's branch by writing the resolved content for a conflicted path. The branch tip must be in a conflicted state (e.g. after an unsuccessful rebase); read the path first (it renders with git-style conflict markers) to obtain the merged content, then write the final resolution here.
+    descriptions:
+      zh: "通过为冲突路径写入最终内容来解析本会话分支上的冲突。分支尖端必须处于冲突状态（例如一次失败的变基后）；先读取该路径（会渲染 git 风格冲突标记），得到合并内容后在此写入最终解析。"
     input_schema:
       type: object
       properties:
@@ -126,6 +150,8 @@ tools:
       required: [path, content]
   - name: git-diff
     description: Compare file differences between two revisions, or the whole tree when `path` is omitted.
+    descriptions:
+      zh: "比较两个版本之间的文件差异；省略 path 时比较整棵树的差异。"
     input_schema:
       type: object
       properties:
@@ -141,6 +167,8 @@ tools:
       required: [rev_a, rev_b]
   - name: git-blame
     description: Annotate each line of a file with the change that introduced it.
+    descriptions:
+      zh: "逐行标注文件的变更来源。"
     input_schema:
       type: object
       properties:
@@ -153,6 +181,8 @@ tools:
       required: [rev, path]
   - name: git-log
     description: View commit history, optionally scoped to a branch and a time window.
+    descriptions:
+      zh: "查看提交历史，可限定分支与时间窗。"
     input_schema:
       type: object
       properties:
@@ -170,6 +200,8 @@ tools:
           description: Maximum number of commits to return (default 50).
   - name: git-show
     description: View what a change modified.
+    descriptions:
+      zh: "查看某个变更修改了什么。"
     input_schema:
       type: object
       properties:
@@ -179,6 +211,8 @@ tools:
       required: [rev]
   - name: git-branches
     description: List all branches (bookmarks).
+    descriptions:
+      zh: "列出所有分支（书签）。"
     input_schema:
       type: object
       properties: {}
