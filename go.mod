@@ -3,7 +3,7 @@ module forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension
 go 1.26
 
 require (
-	forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go v1.0.1
+	github.com/abcp-sdk/abc-protocol-go v1.0.2
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/jackc/pgx/v5 v5.10.0
 )

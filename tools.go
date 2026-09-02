@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	abcprotocol "forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go"
-	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/extension"
+	abcprotocol "github.com/abcp-sdk/abc-protocol-go"
+	"github.com/abcp-sdk/abc-protocol-go/extension"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension/internal/httpx"
 )
 

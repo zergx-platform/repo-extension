@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/agent"
-	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/extension"
-	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/manifest"
-	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/natsrun"
-	natsbus "forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/transport/nats"
+	"github.com/abcp-sdk/abc-protocol-go/agent"
+	"github.com/abcp-sdk/abc-protocol-go/extension"
+	"github.com/abcp-sdk/abc-protocol-go/manifest"
+	"github.com/abcp-sdk/abc-protocol-go/natsrun"
+	natsbus "github.com/abcp-sdk/abc-protocol-go/transport/nats"
 )
 
 // ---- manifest binding ----

@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	abcprotocol "forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go"
-	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/extension"
-	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/manifest"
-	natsbus "forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/transport/nats"
+	abcprotocol "github.com/abcp-sdk/abc-protocol-go"
+	"github.com/abcp-sdk/abc-protocol-go/extension"
+	"github.com/abcp-sdk/abc-protocol-go/manifest"
+	natsbus "github.com/abcp-sdk/abc-protocol-go/transport/nats"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension/internal/env"
 )
 
