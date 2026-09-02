@@ -19,6 +19,7 @@ RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories
 WORKDIR /build
 COPY go.mod go.sum ./
 COPY *.go ./
+COPY internal/ internal/
 # manifest.yaml is embedded into the binary via go:embed — no sidecar needed.
 COPY manifest.yaml ./
 RUN CGO_ENABLED=0 go build -o /out/repo-extension .
