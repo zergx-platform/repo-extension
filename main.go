@@ -13,7 +13,7 @@ import (
 	"github.com/abcp-sdk/abc-protocol-go/extension"
 	"github.com/abcp-sdk/abc-protocol-go/manifest"
 	natsbus "github.com/abcp-sdk/abc-protocol-go/transport/nats"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension/internal/env"
+	"github.com/zergx-platform/repo-extension/internal/env"
 )
 
 //go:embed manifest.yaml

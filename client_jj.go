@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension/internal/httpx"
+	"github.com/zergx-platform/repo-extension/internal/httpx"
 )
 
 // jjClient is a thin, status-aware client for the jjlab REST API.

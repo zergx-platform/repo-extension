@@ -4,7 +4,7 @@ import (
 	"context"
 
 	abcprotocol "github.com/abcp-sdk/abc-protocol-go"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension/internal/naming"
+	"github.com/zergx-platform/repo-extension/internal/naming"
 )
 
 // handleLifecycleEvent mirrors one agent lifecycle event into the workspace

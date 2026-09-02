@@ -1,4 +1,4 @@
-module forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension
+module github.com/zergx-platform/repo-extension
 
 go 1.26
 

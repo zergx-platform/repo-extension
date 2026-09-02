@@ -10,7 +10,7 @@ import (
 
 	abcprotocol "github.com/abcp-sdk/abc-protocol-go"
 	"github.com/abcp-sdk/abc-protocol-go/extension"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension/internal/httpx"
+	"github.com/zergx-platform/repo-extension/internal/httpx"
 )
 
 // handlers binds each repo tool to its implementation, forwarding to the

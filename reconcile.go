@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension/internal/naming"
+	"github.com/zergx-platform/repo-extension/internal/naming"
 	"time"
 )
 
