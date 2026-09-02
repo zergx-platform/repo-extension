@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/httpx"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension/internal/httpx"
 	"net/http"
 	"net/http/httptest"
 	"strings"

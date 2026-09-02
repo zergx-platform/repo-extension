@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/naming"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension/internal/naming"
 	"net/http"
 	"sync"
 	"time"

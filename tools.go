@@ -10,7 +10,7 @@ import (
 
 	abcprotocol "forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go"
 	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/extension"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/httpx"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/repo-extension/internal/httpx"
 )
 
 // handlers binds each repo tool to its implementation, forwarding to the

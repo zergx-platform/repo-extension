@@ -4,7 +4,6 @@ go 1.26
 
 require (
 	forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go v1.0.1
-	forgejo.develop.10.199.64.20.nip.io/zergx/go-shared v0.1.1
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/jackc/pgx/v5 v5.10.0
 )
