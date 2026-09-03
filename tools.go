@@ -711,7 +711,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 		},
 		"mr-merge": {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
-				o, r, _, err := s.sessionBase(ctx, args, sessionName)
+				o, r, b, err := s.sessionBase(ctx, args, sessionName)
 				if err != nil {
 					return extension.ToolResultData{}, err
 				}
@@ -728,6 +728,13 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				head, _ := mr["head_branch"].(string)
 				base, _ := mr["base"].(string)
+				// Ownership guard: only the target bookmark's session may merge
+				// (mirrors git-rebase's self-scoped destination). This is what
+				// keeps the review semantics intact — the session that raised
+				// the MR cannot merge its own submission.
+				if b != base {
+					return extension.ToolResultData{}, fmt.Errorf("merge must be invoked from the target bookmark's session (%s:%s#%s), not '%s'", o, r, base, b)
+				}
 				// The merge: rebase the head bookmark's unique commits onto
 				// the base (linear history, change ids preserved).
 				v, err := s.jj.post(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/rebase",
