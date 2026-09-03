@@ -265,6 +265,18 @@ func (c *jjClient) post(ctx context.Context, path string, body interface{}) (map
 	return c.doJSON(req)
 }
 
+// commit applies one or more file actions (create/update/delete) as a single
+// atomic change on jjlab — the GitLab Repository Commits API style. This is
+// the unified write path for write/delete/edit/resolve tools.
+func (c *jjClient) commit(ctx context.Context, org, repo, branch, message string, actions []map[string]interface{}) (map[string]interface{}, error) {
+	body := map[string]interface{}{
+		"branch":  branch,
+		"message": message,
+		"actions": actions,
+	}
+	return c.post(ctx, "/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/commits", body)
+}
+
 func (c *jjClient) put(ctx context.Context, path string, body interface{}) (map[string]interface{}, error) {
 	var rd io.Reader
 	if body != nil {

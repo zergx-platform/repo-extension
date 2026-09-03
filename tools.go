@@ -45,25 +45,8 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 		return text, sha, size, nil
 	}
 
-	// fileBody builds the Gitea-style write body: base64 content + branch.
-	fileBody := func(b, content, message string) map[string]interface{} {
-		return map[string]interface{}{
-			"content_base64": base64.StdEncoding.EncodeToString([]byte(content)),
-			"branch":         b,
-			"message":        message,
-		}
-	}
-
-	// fileBodySha is fileBody plus an optimistic-lock base blob sha (GitHub
-	// contents semantics): the caller passes the blob sha it read; jjlab
-	// rejects the write (409) when the file changed concurrently.
-	fileBodySha := func(b, content, message, sha string) map[string]interface{} {
-		body := fileBody(b, content, message)
-		if sha != "" {
-			body["sha"] = sha
-		}
-		return body
-	}
+	// fileBody builds the atomic-commit action body for a create/update.
+	// (unused inline helper retained for clarity in write/edit paths below.)
 
 	return map[string]extension.ToolSpec{
 		"read": {
@@ -156,7 +139,9 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					_ = oldText
 					baseSha = oldSha
 				}
-				v, err := s.jj.put(ctx, contentsPath(o, r, b, path), fileBodySha(b, content, message, baseSha))
+				v, err := s.jj.commit(ctx, o, r, b, message, []map[string]interface{}{
+					{"action": "update", "path": path, "content_base64": base64.StdEncoding.EncodeToString([]byte(content)), "sha": baseSha},
+				})
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to write file: %w", err)
 				}
@@ -186,11 +171,8 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if _, oldSha, _, rerr := readFileRaw(ctx, o, r, b, path); rerr == nil {
 					baseSha = oldSha
 				}
-				body := map[string]interface{}{"branch": b, "message": message}
-				if baseSha != "" {
-					body["sha"] = baseSha
-				}
-				v, err := s.jj.delete(ctx, contentsPath(o, r, b, path), body)
+				body := map[string]interface{}{"action": "delete", "path": path, "sha": baseSha}
+				v, err := s.jj.commit(ctx, o, r, b, message, []map[string]interface{}{body})
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to delete file: %w", err)
 				}
@@ -233,7 +215,9 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 
 				// Optimistic-lock: pass the blob sha we read as the base so a
 				// concurrent edit is rejected (409) instead of clobbered.
-				v, err := s.jj.put(ctx, contentsPath(o, r, b, path), fileBodySha(b, newContent, message, sha))
+				v, err := s.jj.commit(ctx, o, r, b, message, []map[string]interface{}{
+					{"action": "update", "path": path, "content_base64": base64.StdEncoding.EncodeToString([]byte(newContent)), "sha": sha},
+				})
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to write edited result: %w", err)
 				}
@@ -412,7 +396,16 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				content := abcprotocol.ArgString(args, "content")
 				message := "resolve " + path
-				v, err := s.jj.put(ctx, contentsPath(o, r, b, path), fileBody(b, content, message))
+				// git-resolve rewrites a conflicted file; include its current
+				// blob sha as the optimistic-lock base so overlays on a stale
+				// conflict are rejected too.
+				baseSha := ""
+				if _, oldSha, _, rerr := readFileRaw(ctx, o, r, b, path); rerr == nil {
+					baseSha = oldSha
+				}
+				v, err := s.jj.commit(ctx, o, r, b, message, []map[string]interface{}{
+					{"action": "update", "path": path, "content_base64": base64.StdEncoding.EncodeToString([]byte(content)), "sha": baseSha},
+				})
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("resolve failed: %w", err)
 				}
