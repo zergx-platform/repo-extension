@@ -378,7 +378,8 @@ func (c *jjClient) ListMrs(ctx context.Context, org, repo, state string) ([]inte
 	if err != nil {
 		return nil, err
 	}
-	return sliceOf(v["mrs"]), nil
+	// jjlab `list_mrs` returns `{"pull_requests": [...]}`.
+	return sliceOf(v["pull_requests"]), nil
 }
 
 // GetMr fetches one merge request by number.

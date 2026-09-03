@@ -728,6 +728,10 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				head, _ := mr["head_branch"].(string)
 				base, _ := mr["base"].(string)
+				headSha, _ := mr["head_sha"].(string)
+				if headSha == "" {
+					return extension.ToolResultData{}, fmt.Errorf("merge request #%d has no head sha (force-push refresh needed?)", number)
+				}
 				// Ownership guard: only the target bookmark's session may merge
 				// (mirrors git-rebase's self-scoped destination). This is what
 				// keeps the review semantics intact — the session that raised
@@ -735,10 +739,12 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if b != base {
 					return extension.ToolResultData{}, fmt.Errorf("merge must be invoked from the target bookmark's session (%s:%s#%s), not '%s'", o, r, base, b)
 				}
-				// The merge: rebase the head bookmark's unique commits onto
-				// the base (linear history, change ids preserved).
+				// The merge: rebase the head's exact reviewed snapshot onto the
+				// base bookmark's current position. `head_sha` (immutable) is the
+				// content source so the merge reflects precisely what was
+				// reviewed; the source bookmark's later commits do not sneak in.
 				v, err := s.jj.post(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/rebase",
-					map[string]interface{}{"source": head, "dest": base})
+					map[string]interface{}{"source": headSha, "dest": base})
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("merge failed: %w", err)
 				}
