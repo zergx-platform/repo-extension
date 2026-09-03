@@ -547,7 +547,311 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"branches": meta}}, nil
 			},
 		},
+		"mr-create": {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
+				o, r, b, err := s.sessionBase(ctx, args, sessionName)
+				if err != nil {
+					return extension.ToolResultData{}, err
+				}
+				target := abcprotocol.ArgString(args, "target")
+				if target == "" {
+					return extension.ToolResultData{}, fmt.Errorf("missing 'target' argument")
+				}
+				if target == b {
+					return extension.ToolResultData{}, fmt.Errorf("target must differ from the current branch '%s'", b)
+				}
+				title := abcprotocol.ArgString(args, "title")
+				if title == "" {
+					title = fmt.Sprintf("Merge %s into %s", b, target)
+				}
+				description := abcprotocol.ArgString(args, "description")
+				// Resolve (or adopt) the target session so the notification
+				// has somewhere to land.
+				targetSession, _, err := s.adoptBookmark(ctx, o, r, target)
+				if err != nil {
+					return extension.ToolResultData{}, err
+				}
+				mr, err := s.jj.CreateMr(ctx, o, r, title, description, b, target)
+				if err != nil {
+					return extension.ToolResultData{}, fmt.Errorf("failed to create merge request: %w", err)
+				}
+				number := toInt64(mr["number"])
+				// Notify the target session: its agent wakes, can mr-view the
+				// request and advise its user; approval happens in the chat.
+				noteEn := fmt.Sprintf("Merge request #%d from bookmark '%s': %s. Review it with mr-view #%d.", number, b, title, number)
+				noteZh := fmt.Sprintf("收到来自书签「%s」的合并请求 #%d：%s。可用 mr-view #%d 审查。", b, number, title, number)
+				_ = s.ext.PublishMailboxEvent(ctx, targetSession, "user_prompt", map[string]interface{}{
+					"text": lc(ctx, s.ext, targetSession, noteEn, noteZh),
+				})
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName,
+					fmt.Sprintf("merge request #%d submitted to '%s' (target session notified)", number, target),
+					fmt.Sprintf("已向「%s」提交合并请求 #%d（已通知目标会话）", target, number)),
+					Data: map[string]interface{}{"mr": number, "head": b, "base": target}}, nil
+			},
+		},
+		"mr-list": {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
+				o, r, _, err := s.sessionBase(ctx, args, sessionName)
+				if err != nil {
+					return extension.ToolResultData{}, err
+				}
+				state := abcprotocol.ArgString(args, "state")
+				if state == "" {
+					state = "open"
+				}
+				mrs, err := s.jj.ListMrs(ctx, o, r, state)
+				if err != nil {
+					return extension.ToolResultData{}, fmt.Errorf("failed to list merge requests: %w", err)
+				}
+				if len(mrs) == 0 {
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName,
+						fmt.Sprintf("no %s merge requests.", state),
+						fmt.Sprintf("没有 %s 状态的合并请求。", state)),
+						Data: map[string]interface{}{"mrs": []interface{}{}}}, nil
+				}
+				var sb strings.Builder
+				fmt.Fprintf(&sb, "merge requests (%d):\n", len(mrs))
+				meta := make([]interface{}, 0, len(mrs))
+				for _, e := range mrs {
+					m, _ := e.(map[string]interface{})
+					meta = append(meta, m)
+					fmt.Fprintf(&sb, "  #%v  %s → %s  [%s]  %v\n",
+						m["number"], m["head_branch"], m["base"], m["state"], m["title"])
+				}
+				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"mrs": meta}}, nil
+			},
+		},
+		"mr-view": {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
+				o, r, _, err := s.sessionBase(ctx, args, sessionName)
+				if err != nil {
+					return extension.ToolResultData{}, err
+				}
+				number := abcprotocol.ArgInt(args, "mr", 0)
+				if number <= 0 {
+					return extension.ToolResultData{}, fmt.Errorf("missing or invalid 'mr' argument")
+				}
+				mr, err := s.jj.GetMr(ctx, o, r, number)
+				if err != nil {
+					return extension.ToolResultData{}, fmt.Errorf("failed to fetch merge request #%d: %w", number, err)
+				}
+				var sb strings.Builder
+				fmt.Fprintf(&sb, "MR #%v  %s\n  state: %s  review: %s\n  head: %s → base: %s\n  title: %v\n\n",
+					mr["number"], mr["state"], mr["state"], mr["review_state"], mr["head_branch"], mr["base"], mr["title"])
+				// Diff (bounded).
+				if diff, derr := s.jj.MrDiff(ctx, o, r, number); derr == nil {
+					text := fmt.Sprintf("%v", diff)
+					if len(text) > 8000 {
+						text = text[:8000] + "\n… (diff truncated)"
+					}
+					fmt.Fprintf(&sb, "diff:\n%s\n", text)
+				}
+				if reviews, rerr := s.jj.ListMrReviews(ctx, o, r, number); rerr == nil && len(reviews) > 0 {
+					fmt.Fprintf(&sb, "\nreviews (%d):\n", len(reviews))
+					for _, e := range reviews {
+						if rv, ok := e.(map[string]interface{}); ok {
+							fmt.Fprintf(&sb, "  [%v] %v\n", rv["state"], rv["body"])
+						}
+					}
+				}
+				if comments, cerr := s.jj.ListMrComments(ctx, o, r, number); cerr == nil && len(comments) > 0 {
+					fmt.Fprintf(&sb, "\ncomments (%d):\n", len(comments))
+					for _, e := range comments {
+						if cm, ok := e.(map[string]interface{}); ok {
+							fmt.Fprintf(&sb, "  %v\n", cm["body"])
+						}
+					}
+				}
+				return extension.ToolResultData{Content: sb.String(), Data: mr}, nil
+			},
+		},
+		"mr-review": {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
+				o, r, _, err := s.sessionBase(ctx, args, sessionName)
+				if err != nil {
+					return extension.ToolResultData{}, err
+				}
+				number := abcprotocol.ArgInt(args, "mr", 0)
+				if number <= 0 {
+					return extension.ToolResultData{}, fmt.Errorf("missing or invalid 'mr' argument")
+				}
+				state := abcprotocol.ArgString(args, "state")
+				if state != "approved" && state != "rejected" {
+					return extension.ToolResultData{}, fmt.Errorf("'state' must be approved or rejected")
+				}
+				body := abcprotocol.ArgString(args, "body")
+				if err := s.jj.AddMrReview(ctx, o, r, number, state, body); err != nil {
+					return extension.ToolResultData{}, fmt.Errorf("failed to add review: %w", err)
+				}
+				// Notify the initiator (head bookmark's session) so its agent
+				// learns the verdict — approved = soon merging, rejected =
+				// address the feedback. Self-reviews stay silent.
+				if mr, gerr := s.jj.GetMr(ctx, o, r, number); gerr == nil {
+					if head, _ := mr["head_branch"].(string); head != "" {
+						if headSession := namingSession(o, r, head); headSession != sessionName {
+							var noteEn, noteZh string
+							if state == "approved" {
+								noteEn = fmt.Sprintf("merge request #%d passed review%s.", number, reviewSuffix(body))
+								noteZh = fmt.Sprintf("合并请求 #%d 已通过评审%s。", number, reviewSuffixZh(body))
+							} else {
+								noteEn = fmt.Sprintf("merge request #%d was rejected in review%s.", number, reviewSuffix(body))
+								noteZh = fmt.Sprintf("合并请求 #%d 在评审中被拒绝%s。", number, reviewSuffixZh(body))
+							}
+							_ = s.ext.PublishMailboxEvent(ctx, headSession, "user_prompt", map[string]interface{}{
+								"text": lc(ctx, s.ext, headSession, noteEn, noteZh),
+							})
+						}
+					}
+				}
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName,
+					fmt.Sprintf("review '%s' recorded on MR #%d (initiator notified).", state, number),
+					fmt.Sprintf("已在 MR #%d 记录「%s」评审（已通知发起者）。", number, state)),
+					Data: map[string]interface{}{"mr": number, "state": state}}, nil
+			},
+		},
+		"mr-merge": {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
+				o, r, _, err := s.sessionBase(ctx, args, sessionName)
+				if err != nil {
+					return extension.ToolResultData{}, err
+				}
+				number := abcprotocol.ArgInt(args, "mr", 0)
+				if number <= 0 {
+					return extension.ToolResultData{}, fmt.Errorf("missing or invalid 'mr' argument")
+				}
+				mr, err := s.jj.GetMr(ctx, o, r, number)
+				if err != nil {
+					return extension.ToolResultData{}, fmt.Errorf("failed to fetch merge request #%d: %w", number, err)
+				}
+				if state, _ := mr["state"].(string); state != "open" {
+					return extension.ToolResultData{}, fmt.Errorf("merge request #%d is %s (only open MRs can merge)", number, state)
+				}
+				head, _ := mr["head_branch"].(string)
+				base, _ := mr["base"].(string)
+				// The merge: rebase the head bookmark's unique commits onto
+				// the base (linear history, change ids preserved).
+				v, err := s.jj.post(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/rebase",
+					map[string]interface{}{"source": head, "dest": base})
+				if err != nil {
+					return extension.ToolResultData{}, fmt.Errorf("merge failed: %w", err)
+				}
+				sum, _ := v["rebase"].(map[string]interface{})
+				conflicts := strSlice(sum, "conflicts")
+				if len(conflicts) > 0 {
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName,
+						fmt.Sprintf("merge of MR #%d left %d conflict(s) on '%s': %s — resolve them (git-resolve), then retry", number, len(conflicts), base, strings.Join(conflicts, ", ")),
+						fmt.Sprintf("MR #%d 合并在「%s」上留下 %d 个冲突：%s——请用 git-resolve 解决后重试", number, base, len(conflicts), strings.Join(conflicts, ", "))),
+						Data: map[string]interface{}{"mr": number, "conflicts": conflicts}}, nil
+				}
+				_ = s.jj.AddMrReview(ctx, o, r, number, "approved", "merged by zergx agent")
+				if err := s.jj.UpdateMrState(ctx, o, r, number, "merged"); err != nil {
+					return extension.ToolResultData{}, fmt.Errorf("merged but failed to update MR state: %w", err)
+				}
+				// Tell the source session its work landed.
+				headSession := namingSession(o, r, head)
+				noteEn := fmt.Sprintf("merge request #%d into '%s' was merged (tip %s).", number, base, shortID(strVal(sum, "commit_id")))
+				noteZh := fmt.Sprintf("你发往「%s」的合并请求 #%d 已合并（尖端 %s）。", base, number, shortID(strVal(sum, "commit_id")))
+				_ = s.ext.PublishMailboxEvent(ctx, headSession, "user_prompt", map[string]interface{}{
+					"text": lc(ctx, s.ext, headSession, noteEn, noteZh),
+				})
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName,
+					fmt.Sprintf("merge request #%d merged into '%s' (tip %s, change %s).", number, base, shortID(strVal(sum, "commit_id")), shortID(strVal(sum, "change_id"))),
+					fmt.Sprintf("合并请求 #%d 已并入「%s」（尖端 %s，变更 %s）。", number, base, shortID(strVal(sum, "commit_id")), shortID(strVal(sum, "change_id")))),
+					Data: map[string]interface{}{"mr": number, "commit_id": strVal(sum, "commit_id"), "change_id": strVal(sum, "change_id")}}, nil
+			},
+		},
+		"fork-bookmark": {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
+				o, r, b, err := s.sessionBase(ctx, args, sessionName)
+				if err != nil {
+					return extension.ToolResultData{}, err
+				}
+				newBM := abcprotocol.ArgString(args, "bookmark")
+				if newBM == "" {
+					return extension.ToolResultData{}, fmt.Errorf("missing 'bookmark' argument")
+				}
+				if newBM == b {
+					return extension.ToolResultData{}, fmt.Errorf("bookmark must differ from the current branch '%s'", b)
+				}
+				quest := abcprotocol.ArgString(args, "quest")
+				if quest == "" {
+					return extension.ToolResultData{}, fmt.Errorf("missing 'quest' argument")
+				}
+				// Call-time snapshots: the chat fork point (pre-step tip) and
+				// the git anchor (immutable commit sha). Both ride the
+				// worksheet so approval latency cannot shift the fork.
+				forkTip := ""
+				if sess, serr := s.ag.GetSession(ctx, sessionName); serr == nil && sess != nil {
+					if tip, _ := sess["tip_id"].(string); tip != "" {
+						forkTip = tip
+					}
+				}
+				baseRev, berr := s.jj.GetBookmarkHead(ctx, o, r, b)
+				if berr != nil {
+					return extension.ToolResultData{}, fmt.Errorf("failed to resolve branch head: %w", berr)
+				}
+				if err := s.publishWorksheet(ctx, sessionName, "fork-bookmark", map[string]interface{}{
+					"bookmark": newBM, "quest": quest, "parent": b,
+					"fork_tip": forkTip, "base_rev": baseRev,
+				}, callID); err != nil {
+					return extension.ToolResultData{}, fmt.Errorf("failed to publish worksheet: %w", err)
+				}
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName,
+					fmt.Sprintf("worksheet published: fork to '%s' (awaiting user approval)", newBM),
+					fmt.Sprintf("工单已发布：派生到「%s」（等待用户批准）", newBM)),
+					Data: map[string]interface{}{"worksheet": "fork-bookmark", "bookmark": newBM}}, nil
+			},
+		},
+		"delete-bookmark": {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
+				o, r, b, err := s.sessionBase(ctx, args, sessionName)
+				if err != nil {
+					return extension.ToolResultData{}, err
+				}
+				bm := abcprotocol.ArgString(args, "bookmark")
+				if bm == "" {
+					return extension.ToolResultData{}, fmt.Errorf("missing 'bookmark' argument")
+				}
+				if bm == b {
+					return extension.ToolResultData{}, fmt.Errorf("refusing to delete this session's own bookmark '%s'", bm)
+				}
+				if bm == "main" {
+					return extension.ToolResultData{}, fmt.Errorf("refusing to delete the default branch 'main'")
+				}
+				tree, err := s.jj.GetRepoTree(ctx)
+				if err != nil {
+					return extension.ToolResultData{}, err
+				}
+				if !tree.bookmarkExists(o, r, bm) {
+					return extension.ToolResultData{}, fmt.Errorf("bookmark '%s' does not exist", bm)
+				}
+				target := namingSession(o, r, bm)
+				if err := s.publishWorksheet(ctx, sessionName, "delete-bookmark", map[string]interface{}{
+					"bookmark": bm, "session": target,
+				}, callID); err != nil {
+					return extension.ToolResultData{}, fmt.Errorf("failed to publish worksheet: %w", err)
+				}
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName,
+					fmt.Sprintf("worksheet published: delete bookmark '%s' and its session (awaiting user approval)", bm),
+					fmt.Sprintf("工单已发布：删除书签「%s」及其会话（等待用户批准）", bm)),
+					Data: map[string]interface{}{"worksheet": "delete-bookmark", "bookmark": bm}}, nil
+			},
+		},
 	}
+}
+
+func reviewSuffix(body string) string {
+	if body == "" {
+		return ""
+	}
+	return ": " + body
+}
+
+func reviewSuffixZh(body string) string {
+	if body == "" {
+		return ""
+	}
+	return "：" + body
 }
 
 // sessionBase resolves the (org, repo, bookmark) triple for a tool call.
@@ -862,4 +1166,17 @@ func applyLineEdit(current string, startLine, endLine int64, content string) (st
 		joined += "\n"
 	}
 	return joined, nil
+}
+
+// toInt64 safely coerces a JSON-decoded number-ish value.
+func toInt64(v interface{}) int64 {
+	switch n := v.(type) {
+	case float64:
+		return int64(n)
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	}
+	return 0
 }

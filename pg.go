@@ -104,6 +104,12 @@ CREATE TABLE IF NOT EXISTS session_repos (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (org, repo, bookmark)
+);
+CREATE TABLE IF NOT EXISTS executed_worksheets (
+  worksheet_id TEXT PRIMARY KEY,
+  action       TEXT NOT NULL DEFAULT '',
+  session_name TEXT NOT NULL DEFAULT '',
+  executed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );`
 	_, err := s.pool.Exec(ctx, ddl)
 	if err != nil {
@@ -254,4 +260,20 @@ func (s *Store) listRows(ctx context.Context, q string, args ...interface{}) ([]
 func isUniqueViolation(err error) bool {
 	var pe *pgconn.PgError
 	return errors.As(err, &pe) && pe.Code == "23505"
+}
+
+// ---- worksheet dedup ----
+
+// ExecutedWorksheet records a worksheet as executed (at-least-once dispatch
+// guard). Returns true when this call was the first to claim it; false means
+// a prior execution already ran and side effects must be skipped.
+func (s *Store) ExecutedWorksheet(ctx context.Context, worksheetID, action, sessionName string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+INSERT INTO executed_worksheets (worksheet_id, action, session_name)
+VALUES ($1, $2, $3)
+ON CONFLICT (worksheet_id) DO NOTHING`, worksheetID, action, sessionName)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }

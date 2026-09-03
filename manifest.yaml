@@ -2,217 +2,409 @@
 # extension's wire protocol (tools + session variables + lifecycle). Handler
 # and resolver bindings stay in code (tools.go / variables.go).
 id: repo
-version: 0.3.1
+version: 0.4.0
 lifecycle: [created, forked, renamed, deleted]
 variables:
   - name: org
     scope: session
     description: Organization of the current workspace (session variable, from the mapping table).
     descriptions:
-      zh: "当前工作区的组织（会话变量，来自映射表）。"
+      zh: 当前工作区的组织（会话变量，来自映射表）。
   - name: repo
     scope: session
     description: Repository name of the current workspace (session variable, from the mapping table).
     descriptions:
-      zh: "当前工作区的仓库名称（会话变量，来自映射表）。"
+      zh: 当前工作区的仓库名称（会话变量，来自映射表）。
   - name: bookmark
     scope: session
     description: Branch/bookmark of the current workspace (session variable, from the mapping table).
     descriptions:
-      zh: "当前工作区所在分支/书签（会话变量，来自映射表）。"
+      zh: 当前工作区所在分支/书签（会话变量，来自映射表）。
 tools:
   - name: read
     description: Read a file from the repository, returning line-numbered (1-based) content. Use offset/limit to read large files in segments.
     descriptions:
-      zh: "读取仓库中的文件，返回带行号（从 1 开始）的内容。用 offset/limit 分段读取大文件。"
+      zh: 读取仓库中的文件，返回带行号（从 1 开始）的内容。用 offset/limit 分段读取大文件。
     input_schema:
       type: object
       properties:
         path:
           type: string
           description: File path to read (relative to the repository root).
+          descriptions:
+            zh: 要读取的文件路径（相对于仓库根目录）。
         offset:
           type: integer
           description: Starting line number (1-based, default 1).
+          descriptions:
+            zh: 起始行号（从 1 开始，默认 1）。
         limit:
           type: integer
           description: Maximum number of lines to read (0/omitted = read to end of file).
+          descriptions:
+            zh: 最多读取的行数（0/省略 = 读到文件末尾）。
       required: [path]
   - name: write
     description: Create or overwrite a file in the repository (committed as one change).
     descriptions:
-      zh: "创建或覆盖仓库中的文件（作为一个变更提交）。"
+      zh: 创建或覆盖仓库中的文件（作为一个变更提交）。
     input_schema:
       type: object
       properties:
         path:
           type: string
           description: File path to create/overwrite (relative to the repository root).
+          descriptions:
+            zh: 要创建/覆盖的文件路径（相对于仓库根目录）。
         content:
           type: string
           description: Full file content.
+          descriptions:
+            zh: 完整文件内容。
         message:
           type: string
           description: Commit message (defaults to "write <path>").
+          descriptions:
+            zh: 提交信息（默认 "write <path>"）。
       required: [path, content]
   - name: delete
     description: Delete a file from the repository (committed as one change).
     descriptions:
-      zh: "删除仓库中的文件（作为一个变更提交）。"
+      zh: 删除仓库中的文件（作为一个变更提交）。
     input_schema:
       type: object
       properties:
         path:
           type: string
           description: File path to delete (relative to the repository root).
+          descriptions:
+            zh: 要删除的文件路径（相对于仓库根目录）。
         message:
           type: string
           description: Commit message (defaults to "delete <path>").
+          descriptions:
+            zh: 提交信息（默认 "delete <path>"）。
       required: [path]
   - name: edit
     description: Replace or insert file content by line number. Reads and validates the current file first, applies the line edit, then writes back with sha verification to prevent clobbering concurrent edits.
     descriptions:
-      zh: "按行号替换或插入文件内容。先读取并校验当前文件，应用行编辑，再带 sha 校验写回，防止并发编辑互相覆盖。"
+      zh: 按行号替换或插入文件内容。先读取并校验当前文件，应用行编辑，再带 sha 校验写回，防止并发编辑互相覆盖。
     input_schema:
       type: object
       properties:
         path:
           type: string
           description: File path to edit (relative to the repository root).
+          descriptions:
+            zh: 要编辑的文件路径（相对于仓库根目录）。
         start_line:
           type: integer
           description: Start line (1-based); when end_line < start_line, inserts before start_line.
+          descriptions:
+            zh: 起始行（从 1 开始）；当 end_line < start_line 时，在 start_line 前插入。
         end_line:
           type: integer
           description: End line (1-based, inclusive); less than start_line means insert mode.
+          descriptions:
+            zh: 结束行（从 1 开始，含端点）；小于 start_line 表示插入模式。
         content:
           type: string
           description: Replacement or inserted content.
+          descriptions:
+            zh: 替换或插入的内容。
         message:
           type: string
           description: Commit message (defaults to "edit <path>").
+          descriptions:
+            zh: 提交信息（默认 "edit <path>"）。
       required: [path, start_line, end_line, content]
   - name: ls
     description: List files and directories in the repository tree.
     descriptions:
-      zh: "列出仓库目录树中的文件与目录。"
+      zh: 列出仓库目录树中的文件与目录。
     input_schema:
       type: object
       properties: {}
   - name: grep
     description: Search file contents with a regular expression.
     descriptions:
-      zh: "使用正则表达式搜索文件内容。"
+      zh: 使用正则表达式搜索文件内容。
     input_schema:
       type: object
       properties:
         pattern:
           type: string
           description: Regular expression to search file contents.
+          descriptions:
+            zh: 用于搜索文件内容的正则表达式。
       required: [pattern]
   - name: explore
     description: Browse the organization/repository/branch structure.
     descriptions:
-      zh: "浏览组织/仓库/分支结构。"
+      zh: 浏览组织/仓库/分支结构。
     input_schema:
       type: object
       properties:
         org:
           type: string
           description: Organization name (omitted = list all organizations).
+          descriptions:
+            zh: 组织名（省略 = 列出所有组织）。
         repo:
           type: string
           description: Repository name (omitted = list all repositories in the org).
+          descriptions:
+            zh: 仓库名（省略 = 列出该组织下所有仓库）。
   - name: git-rebase
     description: Rebase the commits unique to `source` onto this session's branch (the current workspace bookmark). The current branch advances (linear history; source change ids are preserved). The destination is always the session's own branch and cannot be overridden.
     descriptions:
-      zh: "把 `source` 分支上独有的提交变基到本会话分支（当前工作区书签）上。当前分支向前推进（线性历史；保留源码 change id）。目标始终是本会话自己的分支，不可覆盖。"
+      zh: 把 `source` 分支上独有的提交变基到本会话分支（当前工作区书签）上。当前分支向前推进（线性历史；保留源码 change id）。目标始终是本会话自己的分支，不可覆盖。
     input_schema:
       type: object
       properties:
         source:
           type: string
           description: Branch/bookmark whose commits are rebased onto the current workspace branch.
+          descriptions:
+            zh: 将其独有提交变基到当前工作区分支的分支/书签。
       required: [source]
   - name: git-resolve
     description: Resolve a conflict on this session's branch by writing the resolved content for a conflicted path. The branch tip must be in a conflicted state (e.g. after an unsuccessful rebase); read the path first (it renders with git-style conflict markers) to obtain the merged content, then write the final resolution here.
     descriptions:
-      zh: "通过为冲突路径写入最终内容来解析本会话分支上的冲突。分支尖端必须处于冲突状态（例如一次失败的变基后）；先读取该路径（会渲染 git 风格冲突标记），得到合并内容后在此写入最终解析。"
+      zh: 通过为冲突路径写入最终内容来解析本会话分支上的冲突。分支尖端必须处于冲突状态（例如一次失败的变基后）；先读取该路径（会渲染 git 风格冲突标记），得到合并内容后在此写入最终解析。
     input_schema:
       type: object
       properties:
         path:
           type: string
           description: Repo-relative path of the conflicted file to resolve.
+          descriptions:
+            zh: 待解析冲突文件的仓库相对路径。
         content:
           type: string
           description: Full resolved file content to write at `path`.
+          descriptions:
+            zh: 写入 `path` 的最终解析内容。
       required: [path, content]
   - name: git-diff
     description: Compare file differences between two revisions, or the whole tree when `path` is omitted.
     descriptions:
-      zh: "比较两个版本之间的文件差异；省略 path 时比较整棵树的差异。"
+      zh: 比较两个版本之间的文件差异；省略 path 时比较整棵树的差异。
     input_schema:
       type: object
       properties:
         rev_a:
           type: string
           description: Start revision (change ID or bookmark).
+          descriptions:
+            zh: 起始版本（change ID 或书签）。
         rev_b:
           type: string
           description: End revision (change ID or bookmark).
+          descriptions:
+            zh: 结束版本（change ID 或书签）。
         path:
           type: string
           description: Optional file path; omitted = whole-tree diff between the two revisions.
+          descriptions:
+            zh: 可选文件路径；省略 = 两版本间的整树差异。
       required: [rev_a, rev_b]
   - name: git-blame
     description: Annotate each line of a file with the change that introduced it.
     descriptions:
-      zh: "逐行标注文件的变更来源。"
+      zh: 逐行标注文件的变更来源。
     input_schema:
       type: object
       properties:
         rev:
           type: string
           description: Revision to trace (change ID or bookmark; defaults to the branch head).
+          descriptions:
+            zh: 要追溯的版本（change ID 或书签；默认分支头）。
         path:
           type: string
           description: File path to trace.
+          descriptions:
+            zh: 要追溯的文件路径。
       required: [rev, path]
   - name: git-log
     description: View commit history, optionally scoped to a branch and a time window.
     descriptions:
-      zh: "查看提交历史，可限定分支与时间窗。"
+      zh: 查看提交历史，可限定分支与时间窗。
     input_schema:
       type: object
       properties:
         rev:
           type: string
           description: "Branch/bookmark or change id to start from (default: current branch head)."
+          descriptions:
+            zh: 分支/书签或 change id（默认：当前分支头）。
         since:
           type: string
           description: Inclusive lower time bound (YYYY-MM-DD or RFC3339).
+          descriptions:
+            zh: 含端点的下界时间（YYYY-MM-DD 或 RFC3339）。
         until:
           type: string
           description: Inclusive upper time bound (YYYY-MM-DD or RFC3339).
+          descriptions:
+            zh: 含端点的上界时间（YYYY-MM-DD 或 RFC3339）。
         limit:
           type: integer
           description: Maximum number of commits to return (default 50).
+          descriptions:
+            zh: 最多返回的提交数（默认 50）。
   - name: git-show
     description: View what a change modified.
     descriptions:
-      zh: "查看某个变更修改了什么。"
+      zh: 查看某个变更修改了什么。
     input_schema:
       type: object
       properties:
         rev:
           type: string
           description: Change ID.
+          descriptions:
+            zh: change ID。
       required: [rev]
   - name: git-branches
     description: List all branches (bookmarks).
     descriptions:
-      zh: "列出所有分支（书签）。"
+      zh: 列出所有分支（书签）。
     input_schema:
       type: object
       properties: {}
+  - name: mr-create
+    description: Submit a merge request merging this session's branch into another bookmark. Creates a native jj-lab merge request (CI runs on the head) and notifies the target bookmark's session via mailbox so its agent can review with mr-view.
+    descriptions:
+      zh: 提交合并请求，把本会话分支合并到另一书签。创建 jj-lab 原生 MR（CI 在 head 上运行），并通过 mailbox 通知目标书签的会话，其代理可用 mr-view 审查。
+    input_schema:
+      type: object
+      properties:
+        target:
+          type: string
+          description: Target bookmark in this repository (e.g. "main").
+          descriptions:
+            zh: 本仓库中的目标书签（例如 "main"）。
+        title:
+          type: string
+          description: Short MR title (defaults to "Merge <head> into <target>").
+          descriptions:
+            zh: MR 简短标题（默认 "Merge <head> into <target>"）。
+        description:
+          type: string
+          description: What and why — shown to the reviewer.
+          descriptions:
+            zh: 内容与原因——展示给评审者。
+      required: [target]
+  - name: mr-list
+    description: "List merge requests (default: open ones) with number, head→base, state and title."
+    descriptions:
+      zh: 列出合并请求（默认 open 状态），含编号、head→base、状态与标题。
+    input_schema:
+      type: object
+      properties:
+        state:
+          type: string
+          description: State filter (open / closed / merged; default open).
+          descriptions:
+            zh: 状态过滤（open / closed / merged；默认 open）。
+  - name: mr-view
+    description: View one merge request in full — metadata, review state, bounded diff, reviews and comments. Use it to review an incoming or outgoing MR before deciding.
+    descriptions:
+      zh: 查看单个合并请求的完整信息——元数据、评审状态、截断的 diff、评审与评论。决定前先用它审查。
+    input_schema:
+      type: object
+      properties:
+        mr:
+          type: integer
+          description: Merge request number.
+          descriptions:
+            zh: 合并请求编号。
+      required: [mr]
+  - name: mr-review
+    description: Record a review (approved / rejected) on a merge request with an optional comment. The initiator's session is notified via mailbox so its agent learns the verdict.
+    descriptions:
+      zh: 在合并请求上记录评审（approved / rejected）并可选附评论。发起者会话将经 mailbox 收到评审结果。
+    input_schema:
+      type: object
+      properties:
+        mr:
+          type: integer
+          description: Merge request number.
+          descriptions:
+            zh: 合并请求编号。
+        state:
+          type: string
+          enum: [approved, rejected]
+          description: Review verdict.
+          descriptions:
+            zh: 评审结论。
+        body:
+          type: string
+          description: Optional review comment (delivered to the initiator).
+          descriptions:
+            zh: 可选评审评论（会送达发起者）。
+      required: [mr, state]
+  - name: mr-merge
+    description: "Merge an open merge request — rebases the head bookmark''s unique commits onto the base (linear history, change ids preserved), records an approval, and closes the MR as merged. The initiator''s session is notified. On conflicts the MR stays open: resolve with git-resolve, then retry."
+    descriptions:
+      zh: 合并一个 open 状态的 MR——把 head 书签的独有提交变基到 base 上（线性历史、保留 change id），记录评审通过并将 MR 置为 merged，同时通知发起者会话。出现冲突时 MR 保持 open：用 git-resolve 解决后重试。
+    input_schema:
+      type: object
+      properties:
+        mr:
+          type: integer
+          description: Merge request number.
+          descriptions:
+            zh: 合并请求编号。
+      required: [mr]
+  - name: fork-bookmark
+    description: Fan out a parallel sub-task. Publishes a worksheet (requires user approval) to fork this session's branch into a new bookmark with its own session — full chat history is preserved and pinned to this moment. On approval the forked session receives the quest plus a reminder to merge back via mr-create when done.
+    descriptions:
+      zh: 并行拆分子任务。发布工单（需用户批准）把本会话分支派生为新书签及其会话——完整聊天记录保留并钉在当前时刻。批准后子会话收到任务描述和「完成后用 mr-create 发起合并」的提醒。
+    input_schema:
+      type: object
+      properties:
+        bookmark:
+          type: string
+          description: New bookmark name for the fork.
+          descriptions:
+            zh: 派生使用的新书签名称。
+        quest:
+          type: string
+          description: Task description delivered to the forked session as its first prompt.
+          descriptions:
+            zh: 任务描述，作为派生会话的首条提示送达。
+      required: [bookmark, quest]
+  - name: delete-bookmark
+    description: Publishes a worksheet (requires user approval) to delete a bookmark together with its session — the cleanup after that branch's merge request was merged. The default branch and this session's own branch are refused.
+    descriptions:
+      zh: 发布工单（需用户批准）删除书签及其会话——分支 MR 合并后的清理动作。默认分支与本会话自身分支会被拒绝。
+    input_schema:
+      type: object
+      properties:
+        bookmark:
+          type: string
+          description: Bookmark to delete (with its session).
+          descriptions:
+            zh: 要删除的书签（连同其会话）。
+      required: [bookmark]
+hooks:
+  call: [worksheet-decided]
+  call_schemas:
+    worksheet-decided:
+      type: object
+      required: [worksheet_id, action, decision, args, session]
+      properties:
+        worksheet_id:
+          type: string
+        action:
+          type: string
+        decision:
+          type: string
+          enum: [approve, reject]
+        args:
+          type: object
+        session:
+          type: string

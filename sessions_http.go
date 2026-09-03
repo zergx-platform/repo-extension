@@ -86,9 +86,11 @@ func (s *server) bindRow(ctx context.Context, org, repo, bookmark, sid string) e
 	return s.store.InsertManaged(ctx, org, repo)
 }
 
-// completeAdopt binds an EXISTING bookmark to a derived session (manual ops
-// surface: give an orphan bookmark a session). Returns (sessionName, adopted).
-func (s *server) completeAdopt(ctx context.Context, org, repo, bookmark string) (string, bool, error) {
+// adoptBookmark binds an EXISTING bookmark to a derived session, creating
+// the session when needed. Returns (sessionName, adopted). Shared by the
+// manual ops surface (completeAdopt) and tool handlers (mr-create target
+// resolution).
+func (s *server) adoptBookmark(ctx context.Context, org, repo, bookmark string) (string, bool, error) {
 	row, err := s.store.GetRow(ctx, org, repo, bookmark)
 	if err != nil {
 		return "", false, errDownstream("postgres", err)
@@ -114,6 +116,12 @@ func (s *server) completeAdopt(ctx context.Context, org, repo, bookmark string) 
 		return "", false, err
 	}
 	return name, true, nil
+}
+
+// completeAdopt binds an EXISTING bookmark to a derived session (manual ops
+// surface: give an orphan bookmark a session). Returns (sessionName, adopted).
+func (s *server) completeAdopt(ctx context.Context, org, repo, bookmark string) (string, bool, error) {
+	return s.adoptBookmark(ctx, org, repo, bookmark)
 }
 
 // ---- HTTP handlers (ops surface; workspace writes are event-driven) ----

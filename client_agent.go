@@ -91,3 +91,58 @@ func (c *agentClient) ListSessions(ctx context.Context) (map[string]bool, error)
 	}
 	return out, nil
 }
+
+// GetSession returns the session row (nil when absent); the tip_id field
+// feeds fork-point pinning.
+func (c *agentClient) GetSession(ctx context.Context, name string) (map[string]interface{}, error) {
+	status, v, err := c.call(ctx, http.MethodGet, sessionsPath(name), nil)
+	if err != nil {
+		return nil, errDownstream("agent", err)
+	}
+	switch status {
+	case 200:
+		if s, ok := v["session"].(map[string]interface{}); ok {
+			return s, nil
+		}
+		return nil, errDownstream("agent", fmt.Errorf("get session: malformed response"))
+	case 404:
+		return nil, nil
+	default:
+		return nil, errDownstream("agent", fmt.Errorf("get session: HTTP %d %s", status, errText(v)))
+	}
+}
+
+// ForkSession forks parentSID into a new session named `name`. The optional
+// messageID pins the fork to a specific message on the parent's chain (empty
+// forks from the current tip). 409 (already exists) is idempotent success.
+func (c *agentClient) ForkSession(ctx context.Context, parentSID, name, messageID string) error {
+	body := map[string]interface{}{"name": name}
+	if messageID != "" {
+		body["message_id"] = messageID
+	}
+	status, v, err := c.call(ctx, http.MethodPost, sessionsPath(parentSID)+"/fork", body)
+	if err != nil {
+		return errDownstream("agent", err)
+	}
+	switch status {
+	case 200, 409:
+		return nil
+	default:
+		return errDownstream("agent", fmt.Errorf("fork session: HTTP %d %s", status, errText(v)))
+	}
+}
+
+// DeleteSession removes the session (which also fires the lifecycle chain).
+// 404 is idempotent success.
+func (c *agentClient) DeleteSession(ctx context.Context, name string) error {
+	status, v, err := c.call(ctx, http.MethodDelete, sessionsPath(name), nil)
+	if err != nil {
+		return errDownstream("agent", err)
+	}
+	switch status {
+	case 200, 404:
+		return nil
+	default:
+		return errDownstream("agent", fmt.Errorf("delete session: HTTP %d %s", status, errText(v)))
+	}
+}

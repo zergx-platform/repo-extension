@@ -350,3 +350,112 @@ func errText(v map[string]interface{}) string {
 	}
 	return ""
 }
+
+// ---- merge requests (jj-lab native /pulls surface) ----
+
+func mrPath(org, repo string) string {
+	return "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/pulls"
+}
+
+// CreateMr submits a merge request: head/base are bookmark names.
+func (c *jjClient) CreateMr(ctx context.Context, org, repo, title, body, head, base string) (map[string]interface{}, error) {
+	v, err := c.post(ctx, mrPath(org, repo), map[string]interface{}{
+		"title": title, "body": body, "head": head, "base": base,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// ListMrs lists merge requests (empty state = all).
+func (c *jjClient) ListMrs(ctx context.Context, org, repo, state string) ([]interface{}, error) {
+	path := mrPath(org, repo)
+	if state != "" {
+		path += "?state=" + url.QueryEscape(state)
+	}
+	v, err := c.get(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	return sliceOf(v["mrs"]), nil
+}
+
+// GetMr fetches one merge request by number.
+func (c *jjClient) GetMr(ctx context.Context, org, repo string, number int64) (map[string]interface{}, error) {
+	v, err := c.get(ctx, fmt.Sprintf("%s/%d", mrPath(org, repo), number))
+	if err != nil {
+		return nil, err
+	}
+	if m, ok := v["mr"].(map[string]interface{}); ok {
+		return m, nil
+	}
+	return v, nil
+}
+
+// MrDiff fetches the diff payload of one merge request.
+func (c *jjClient) MrDiff(ctx context.Context, org, repo string, number int64) (map[string]interface{}, error) {
+	return c.get(ctx, fmt.Sprintf("%s/%d/diff", mrPath(org, repo), number))
+}
+
+// AddMrReview records a review (state: approved / rejected / ...).
+func (c *jjClient) AddMrReview(ctx context.Context, org, repo string, number int64, state, body string) error {
+	_, err := c.post(ctx, fmt.Sprintf("%s/%d/reviews", mrPath(org, repo), number), map[string]interface{}{
+		"state": state, "body": body,
+	})
+	return err
+}
+
+// UpdateMrState transitions MR state (open / closed / merged / reopen).
+func (c *jjClient) UpdateMrState(ctx context.Context, org, repo string, number int64, state string) error {
+	status, v, err := c.call(ctx, http.MethodPatch, fmt.Sprintf("%s/%d", mrPath(org, repo), number), map[string]interface{}{
+		"state": state,
+	})
+	if err != nil {
+		return errDownstream("jjlab", err)
+	}
+	if status != 200 {
+		return errDownstream("jjlab", fmt.Errorf("update mr: HTTP %d %s", status, errText(v)))
+	}
+	return nil
+}
+
+// ListMrReviews lists the reviews of one merge request.
+func (c *jjClient) ListMrReviews(ctx context.Context, org, repo string, number int64) ([]interface{}, error) {
+	v, err := c.get(ctx, fmt.Sprintf("%s/%d/reviews", mrPath(org, repo), number))
+	if err != nil {
+		return nil, err
+	}
+	return sliceOf(v["reviews"]), nil
+}
+
+// ListMrComments lists the comments of one merge request.
+func (c *jjClient) ListMrComments(ctx context.Context, org, repo string, number int64) ([]interface{}, error) {
+	v, err := c.get(ctx, fmt.Sprintf("%s/%d/comments", mrPath(org, repo), number))
+	if err != nil {
+		return nil, err
+	}
+	return sliceOf(v["comments"]), nil
+}
+
+// GetBookmarkHead resolves a bookmark to its immutable commit sha.
+func (c *jjClient) GetBookmarkHead(ctx context.Context, org, repo, bookmark string) (string, error) {
+	status, v, err := c.call(ctx, http.MethodGet,
+		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/branches/"+url.PathEscape(bookmark), nil)
+	if err != nil {
+		return "", errDownstream("jjlab", err)
+	}
+	if status != 200 {
+		return "", errDownstream("jjlab", fmt.Errorf("get branch: HTTP %d %s", status, errText(v)))
+	}
+	// Prefer the immutable commit sha; fall back to any head shape present.
+	if s, _ := v["sha"].(string); s != "" {
+		return s, nil
+	}
+	if head, ok := v["head"].(map[string]interface{}); ok {
+		if s, _ := head["sha"].(string); s != "" {
+			return s, nil
+		}
+	}
+	return "", errDownstream("jjlab", fmt.Errorf("get branch: no sha in response"))
+}
