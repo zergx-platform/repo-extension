@@ -396,16 +396,13 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				for _, e := range arr {
 					m, _ := e.(map[string]interface{})
 					isHead, _ := m["is_head"].(bool)
-					head := ""
-					if isHead {
-						head = " [HEAD]"
-					}
 					commit := strFrom(m, "commit_id")
-					fmt.Fprintf(&sb, "  %s %s%s\n", shortID(commit), strFrom(m, "message"), head)
+					bmks := bookmarkLabels(m["bookmarks"])
+					fmt.Fprintf(&sb, "  %s %s%s%s\n", shortID(commit), strFrom(m, "message"), bmks, headLabel(isHead))
 					meta = append(meta, map[string]interface{}{
 						"commit_id": commit, "change_id": strFrom(m, "change_id"),
 						"message": strFrom(m, "message"), "author": strFrom(m, "author"),
-						"parents": m["parents"], "is_head": isHead,
+						"parents": m["parents"], "is_head": isHead, "bookmarks": m["bookmarks"],
 					})
 				}
 				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"graph": meta}}, nil
@@ -1008,6 +1005,33 @@ func shortID(id string) string {
 		return id[:8]
 	}
 	return id
+}
+
+// bookmarkLabels renders the bookmarks attached to a graph commit as
+// " (branch: a, b)" — empty when the commit carries no bookmark.
+func bookmarkLabels(v interface{}) string {
+	arr, ok := v.([]interface{})
+	if !ok {
+		return ""
+	}
+	names := make([]string, 0, len(arr))
+	for _, e := range arr {
+		if s, ok := e.(string); ok && s != "" {
+			names = append(names, s)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(names, ", ") + ")"
+}
+
+// headLabel renders " [HEAD]" when the commit is a visible head.
+func headLabel(isHead bool) string {
+	if isHead {
+		return " [HEAD]"
+	}
+	return ""
 }
 
 func countLines(s string) int {
