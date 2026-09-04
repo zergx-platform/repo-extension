@@ -192,8 +192,8 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if path == "" {
 					return extension.ToolResultData{}, fmt.Errorf("missing 'path' argument")
 				}
-				startLine := abcprotocol.ArgInt(args, "start_line", 0)
-				endLine := abcprotocol.ArgInt(args, "end_line", 0)
+				startLine := abcprotocol.ArgInt(args, "start-line", 0)
+				endLine := abcprotocol.ArgInt(args, "end-line", 0)
 				content := abcprotocol.ArgString(args, "content")
 				message := abcprotocol.ArgString(args, "message")
 				if message == "" {
@@ -230,7 +230,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					desc = fmt.Sprintf("replaced lines %d-%d", startLine, endLine)
 				}
 				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("edited file '%s': %s (change %s)", path, desc, shortID(changeID)), fmt.Sprintf("已编辑文件 '%s'：%s（变更 %s）", path, desc, shortID(changeID))), Data: map[string]interface{}{
-					"path": path, "start_line": startLine, "end_line": endLine,
+					"path": path, "start-line": startLine, "end-line": endLine,
 					"old_sha": sha, "change_id": changeID, "diff": diffLines(text, newContent),
 				}}, nil
 			},
@@ -336,8 +336,8 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if err != nil {
 					return extension.ToolResultData{}, err
 				}
-				revA := abcprotocol.ArgString(args, "rev_a")
-				revB := abcprotocol.ArgString(args, "rev_b")
+				revA := abcprotocol.ArgString(args, "rev-a")
+				revB := abcprotocol.ArgString(args, "rev-b")
 				if revA == "" || revB == "" {
 					return extension.ToolResultData{}, fmt.Errorf("rev_a and rev_b are required")
 				}
@@ -354,9 +354,9 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					scope = fmt.Sprintf("file '%s'", path)
 				}
 				if strings.TrimSpace(diff) == "" {
-					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("no diff between '%s' and '%s' (%s).", revA, revB, scope), fmt.Sprintf("'%s' 与 '%s' 之间无差异（%s）。", revA, revB, scope)), Data: map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}}, nil
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("no diff between '%s' and '%s' (%s).", revA, revB, scope), fmt.Sprintf("'%s' 与 '%s' 之间无差异（%s）。", revA, revB, scope)), Data: map[string]interface{}{"path": path, "rev-a": revA, "rev-b": revB}}, nil
 				}
-				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("diff (%s) between '%s'..'%s':\n%s", scope, revA, revB, diff), fmt.Sprintf("差异（%s）介于 '%s'..'%s'：\n%s", scope, revA, revB, diff)), Data: map[string]interface{}{"path": path, "rev_a": revA, "rev_b": revB}}, nil
+				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("diff (%s) between '%s'..'%s':\n%s", scope, revA, revB, diff), fmt.Sprintf("差异（%s）介于 '%s'..'%s'：\n%s", scope, revA, revB, diff)), Data: map[string]interface{}{"path": path, "rev-a": revA, "rev-b": revB}}, nil
 			},
 		},
 		"git-rebase": {

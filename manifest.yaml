@@ -97,12 +97,12 @@ tools:
           description: File path to edit (relative to the repository root).
           descriptions:
             zh: 要编辑的文件路径（相对于仓库根目录）。
-        start_line:
+        start-line:
           type: integer
           description: Start line (1-based); when end_line < start_line, inserts before start_line.
           descriptions:
             zh: 起始行（从 1 开始）；当 end_line < start_line 时，在 start_line 前插入。
-        end_line:
+        end-line:
           type: integer
           description: End line (1-based, inclusive); less than start_line means insert mode.
           descriptions:
@@ -117,7 +117,7 @@ tools:
           description: Commit message (defaults to "edit <path>").
           descriptions:
             zh: 提交信息（默认 "edit <path>"）。
-      required: [path, start_line, end_line, content]
+      required: [path, start-line, end-line, content]
   - name: ls
     description: List files and directories in the repository tree.
     descriptions:
@@ -193,12 +193,12 @@ tools:
     input_schema:
       type: object
       properties:
-        rev_a:
+        rev-a:
           type: string
           description: Start revision (change ID or bookmark).
           descriptions:
             zh: 起始版本（change ID 或书签）。
-        rev_b:
+        rev-b:
           type: string
           description: End revision (change ID or bookmark).
           descriptions:
