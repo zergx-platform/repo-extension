@@ -1148,10 +1148,12 @@ func toEntries(v map[string]interface{}) []entry {
 		}
 		p, _ := m["path"].(string)
 		isDir := false
-		switch k := m["kind"].(string); k {
-		case "tree":
-			isDir = true
-		case "dir":
+		// jjlab contents entries use `type` ("file"/"dir"); some surfaces also
+		// carry `kind` ("tree"/"dir"). `kind`/`type` may be absent or nil
+		// (interface zero value), so read them nil-safely.
+		kind, _ := m["kind"].(string)
+		switch kind {
+		case "tree", "dir":
 			isDir = true
 		}
 		if t, _ := m["type"].(string); t == "tree" || t == "dir" {
