@@ -29,7 +29,7 @@ func TestManifestBinding(t *testing.T) {
 		t.Fatalf("manifest id = %q", m.ID)
 	}
 	if len(m.Tools) != 21 {
-		t.Fatalf("manifest tools = %d, want 21", len(m.Tools))
+		t.Fatalf("manifest tools = %d, want 20", len(m.Tools))
 	}
 	if len(m.Variables) != 3 {
 		t.Fatalf("manifest variables = %d, want 3", len(m.Variables))
@@ -121,7 +121,7 @@ func TestDiscoverWire(t *testing.T) {
 		t.Fatalf("discover = %+v", manifests)
 	}
 	if len(*manifests[0].Tools) != 21 {
-		t.Fatalf("discover tools = %d, want 21", len(*manifests[0].Tools))
+		t.Fatalf("discover tools = %d, want 20", len(*manifests[0].Tools))
 	}
 }
 
@@ -140,7 +140,7 @@ func TestExploreWire(t *testing.T) {
 		}
 		resp.Body.Close()
 	}
-	post("/api/v1/repos/acme/api", map[string]interface{}{"default_branch": "main"})
+	post("/api/v1/repos/acme/api", map[string]interface{}{"default_bookmark": "main"})
 
 	s := &server{base: jj.URL(), jj: newJJClient(jj.URL(), "t")}
 

@@ -208,7 +208,7 @@ func execDeleteBookmark(ctx context.Context, s *server, session string, args map
 		return "", "", errBad("delete-bookmark: refusing to delete this session's own bookmark")
 	}
 	if bm == "main" {
-		return "", "", errBad("delete-bookmark: refusing to delete the default branch 'main'")
+		return "", "", errBad("delete-bookmark: refusing to delete the default bookmark 'main'")
 	}
 	target := argStr(args, "session")
 	if target == "" {

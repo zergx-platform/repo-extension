@@ -20,7 +20,7 @@ import (
 // `newJJClient` so the shared httpx helpers stay purpose-neutral.
 //
 // Existence checks go through the read-only directory scan (`GET /repos`) and
-// the per-repo bookmark listing (`GET /branches`); jjlab no longer auto-inits
+// the per-repo bookmark listing (`GET /bookmarks`); jjlab no longer auto-inits
 // missing repos on read paths.
 type jjClient struct {
 	base  string
@@ -61,12 +61,17 @@ func (c *jjClient) call(ctx context.Context, method, path string, body interface
 	return resp.StatusCode, v, nil
 }
 
-// repoTree is the read-only snapshot of org → repo → bookmarks (branch names).
-type repoTree map[string]map[string][]string
+// repoTree is the read-only snapshot of org → repo → bookmarks.
+type bookmarkInfo struct {
+	Name string
+	Sha  string
+}
+
+type repoTree map[string]map[string][]bookmarkInfo
 
 // GetRepoTree lists every org/repo/bookmark. jjlab's `GET /repos` directory
-// lists orgs+repos but NOT bookmarks, so this fans out one `GET /branches` per
-// repo to reconstruct the branch set (repo counts are small).
+// lists orgs+repos but NOT bookmarks, so this fans out one `GET /bookmarks` per
+// repo to reconstruct the bookmark set (repo counts are small).
 func (c *jjClient) GetRepoTree(ctx context.Context) (repoTree, error) {
 	status, v, err := c.call(ctx, http.MethodGet, "/api/v1/repos", nil)
 	if err != nil {
@@ -83,7 +88,7 @@ func (c *jjClient) GetRepoTree(ctx context.Context) (repoTree, error) {
 			continue
 		}
 		org, _ := om["org"].(string)
-		tree[org] = map[string][]string{}
+		tree[org] = map[string][]bookmarkInfo{}
 		repos, _ := om["repos"].([]interface{})
 		for _, re := range repos {
 			rm, ok := re.(map[string]interface{})
@@ -91,11 +96,11 @@ func (c *jjClient) GetRepoTree(ctx context.Context) (repoTree, error) {
 				continue
 			}
 			repo, _ := rm["repo"].(string)
-			bms, err := c.GetBranches(ctx, org, repo)
+			bms, err := c.GetBookmarksDetail(ctx, org, repo)
 			if err != nil {
-				// A repo that fails its branch listing still surfaces as empty
+				// A repo that fails its bookmark listing still surfaces as empty
 				// rather than failing the whole directory walk.
-				tree[org][repo] = []string{}
+				tree[org][repo] = []bookmarkInfo{}
 				continue
 			}
 			tree[org][repo] = bms
@@ -104,18 +109,44 @@ func (c *jjClient) GetRepoTree(ctx context.Context) (repoTree, error) {
 	return tree, nil
 }
 
-// GetBranches lists a repo's branch names.
-func (c *jjClient) GetBranches(ctx context.Context, org, repo string) ([]string, error) {
+// toBookmarks converts a jjlab /bookmarks response into bookmarkInfo (name+sha).
+func toBookmarks(v map[string]interface{}) []bookmarkInfo {
+	arr, ok := v["bookmarks"].([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]bookmarkInfo, 0, len(arr))
+	for _, e := range arr {
+		m, ok := e.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		out = append(out, bookmarkInfo{Name: strFrom(m, "name"), Sha: strFrom(m, "sha")})
+	}
+	return out
+}
+
+// GetBookmarksDetail lists a repo's bookmarks with their target commit sha.
+func (c *jjClient) GetBookmarksDetail(ctx context.Context, org, repo string) ([]bookmarkInfo, error) {
+	v, err := c.get(ctx, "/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/bookmarks")
+	if err != nil {
+		return nil, err
+	}
+	return toBookmarks(v), nil
+}
+
+// GetBookmarks lists a repo's bookmark names.
+func (c *jjClient) GetBookmarks(ctx context.Context, org, repo string) ([]string, error) {
 	status, v, err := c.call(ctx, http.MethodGet,
-		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/branches", nil)
+		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/bookmarks", nil)
 	if err != nil {
 		return nil, errDownstream("jjlab", err)
 	}
 	if status != 200 {
-		return nil, errDownstream("jjlab", fmt.Errorf("GET branches: HTTP %d", status))
+		return nil, errDownstream("jjlab", fmt.Errorf("GET bookmarks: HTTP %d", status))
 	}
 	var out []string
-	for _, be := range sliceOf(v["branches"]) {
+	for _, be := range sliceOf(v["bookmarks"]) {
 		if bm, ok := be.(map[string]interface{}); ok {
 			if n, _ := bm["name"].(string); n != "" {
 				out = append(out, n)
@@ -140,7 +171,7 @@ func (t repoTree) bookmarkExists(org, repo, bookmark string) bool {
 		return false
 	}
 	for _, b := range repos[repo] {
-		if b == bookmark {
+		if b.Name == bookmark {
 			return true
 		}
 	}
@@ -153,7 +184,7 @@ func (t repoTree) bookmarkExists(org, repo, bookmark string) bool {
 func (c *jjClient) EnsureRepo(ctx context.Context, org, repo string) error {
 	status, v, err := c.call(ctx, http.MethodPost,
 		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo),
-		map[string]interface{}{"default_branch": "main"})
+		map[string]interface{}{"default_bookmark": "main"})
 	if err != nil {
 		return errDownstream("jjlab", err)
 	}
@@ -179,7 +210,7 @@ func (c *jjClient) EnsureBookmark(ctx context.Context, org, repo, src, bookmark 
 		return errNotFound("repository %s/%s does not exist", org, repo)
 	}
 	status, v, err := c.call(ctx, http.MethodPost,
-		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/branches/"+url.PathEscape(bookmark),
+		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/bookmarks/"+url.PathEscape(bookmark),
 		map[string]interface{}{"target": src})
 	if err != nil {
 		return errDownstream("jjlab", err)
@@ -200,7 +231,7 @@ func (c *jjClient) DeleteBookmark(ctx context.Context, org, repo, bookmark strin
 		return nil
 	}
 	status, v, err := c.call(ctx, http.MethodDelete,
-		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/branches/"+url.PathEscape(bookmark), nil)
+		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/bookmarks/"+url.PathEscape(bookmark), nil)
 	if err != nil {
 		return errDownstream("jjlab", err)
 	}
@@ -214,7 +245,7 @@ func (c *jjClient) DeleteBookmark(ctx context.Context, org, repo, bookmark strin
 // resolves in the repo. Read-only via the tree-at-rev endpoint.
 func (c *jjClient) CanResolve(ctx context.Context, org, repo, rev string) (bool, error) {
 	status, _, err := c.call(ctx, http.MethodGet,
-		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/tree/"+url.PathEscape(rev), nil)
+		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/bookmarks", nil)
 	if err != nil {
 		return false, errDownstream("jjlab", err)
 	}
@@ -268,11 +299,11 @@ func (c *jjClient) post(ctx context.Context, path string, body interface{}) (map
 // commit applies one or more file actions (create/update/delete) as a single
 // atomic change on jjlab — the GitLab Repository Commits API style. This is
 // the unified write path for write/delete/edit/resolve tools.
-func (c *jjClient) commit(ctx context.Context, org, repo, branch, message string, actions []map[string]interface{}) (map[string]interface{}, error) {
+func (c *jjClient) commit(ctx context.Context, org, repo, bookmark, message string, actions []map[string]interface{}) (map[string]interface{}, error) {
 	body := map[string]interface{}{
-		"branch":  branch,
-		"message": message,
-		"actions": actions,
+		"bookmark": bookmark,
+		"message":  message,
+		"actions":  actions,
 	}
 	return c.post(ctx, "/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/commits", body)
 }
@@ -442,12 +473,12 @@ func (c *jjClient) ListMrComments(ctx context.Context, org, repo string, number 
 // GetBookmarkHead resolves a bookmark to its immutable commit sha.
 func (c *jjClient) GetBookmarkHead(ctx context.Context, org, repo, bookmark string) (string, error) {
 	status, v, err := c.call(ctx, http.MethodGet,
-		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/branches/"+url.PathEscape(bookmark), nil)
+		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/bookmarks/"+url.PathEscape(bookmark), nil)
 	if err != nil {
 		return "", errDownstream("jjlab", err)
 	}
 	if status != 200 {
-		return "", errDownstream("jjlab", fmt.Errorf("get branch: HTTP %d %s", status, errText(v)))
+		return "", errDownstream("jjlab", fmt.Errorf("get bookmark: HTTP %d %s", status, errText(v)))
 	}
 	// Prefer the immutable commit sha; fall back to any head shape present.
 	if s, _ := v["sha"].(string); s != "" {
@@ -458,5 +489,5 @@ func (c *jjClient) GetBookmarkHead(ctx context.Context, org, repo, bookmark stri
 			return s, nil
 		}
 	}
-	return "", errDownstream("jjlab", fmt.Errorf("get branch: no sha in response"))
+	return "", errDownstream("jjlab", fmt.Errorf("get bookmark: no sha in response"))
 }

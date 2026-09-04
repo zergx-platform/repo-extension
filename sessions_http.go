@@ -177,10 +177,10 @@ func (s *server) listRepos(w http.ResponseWriter, r *http.Request) {
 			bl := []interface{}{}
 			for _, bm := range bms {
 				var sn interface{}
-				if v, ok := bound[org+"/"+repo+"/"+bm]; ok {
+				if v, ok := bound[org+"/"+repo+"/"+bm.Name]; ok {
 					sn = v
 				}
-				bl = append(bl, map[string]interface{}{"branch": bm, "session_name": sn})
+				bl = append(bl, map[string]interface{}{"bookmark": bm.Name, "session_name": sn})
 			}
 			rl = append(rl, map[string]interface{}{"repo": repo, "managed": mSet[org+"/"+repo], "bookmarks": bl})
 		}
@@ -214,10 +214,10 @@ func (s *server) listBookmarks(w http.ResponseWriter, r *http.Request) {
 	out := []interface{}{}
 	for _, bm := range tree[org][repo] {
 		var sn interface{}
-		if v, ok := bound[bm]; ok {
+		if v, ok := bound[bm.Name]; ok {
 			sn = v
 		}
-		out = append(out, map[string]interface{}{"branch": bm, "session_name": sn})
+		out = append(out, map[string]interface{}{"bookmark": bm.Name, "session_name": sn})
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"bookmarks": out})
 }

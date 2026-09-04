@@ -70,7 +70,7 @@ func convergeDrift(ctx context.Context, s *server, sessions map[string]bool) err
 		bms := map[string]bool{}
 		if repos, ok := tree[m.Org]; ok {
 			for _, b := range repos[m.Repo] {
-				bms[b] = true
+				bms[b.Name] = true
 			}
 		}
 		bound := map[string]bool{}

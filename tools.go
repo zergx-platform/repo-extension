@@ -51,7 +51,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 	return map[string]extension.ToolSpec{
 		"read": {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
-				o, r, b, err := s.sessionBase(ctx, args, sessionName)
+				o, r, b, err := s.refBase(ctx, args, sessionName)
 				if err != nil {
 					return extension.ToolResultData{}, err
 				}
@@ -237,11 +237,16 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 		},
 		"ls": {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
-				o, r, b, err := s.sessionBase(ctx, args, sessionName)
+				o, r, b, err := s.refBase(ctx, args, sessionName)
 				if err != nil {
 					return extension.ToolResultData{}, err
 				}
-				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/tree/"+url.PathEscape(b))
+				path := abcprotocol.ArgString(args, "path")
+				endpoint := "/contents" + pathWithSlash(path)
+				if path == "" {
+					endpoint = "/contents"
+				}
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+endpoint+"/?ref="+url.QueryEscape(b))
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to list directory: %w", err)
 				}
@@ -254,8 +259,18 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 						files++
 					}
 				}
+				max := abcprotocol.ArgInt(args, "max", 0)
+				truncated := false
+				if max > 0 && int64(len(entries)) > max {
+					entries = entries[:max]
+					truncated = true
+				}
 				var sb strings.Builder
-				fmt.Fprintf(&sb, "branch '%s' has %d entries (%d dirs, %d files):\n", b, len(entries), dirs, files)
+				if path == "" {
+					fmt.Fprintf(&sb, "rev '%s' has %d entries (%d dirs, %d files):\n", b, len(entries), dirs, files)
+				} else {
+					fmt.Fprintf(&sb, "rev '%s' path '%s' has %d entries (%d dirs, %d files):\n", b, path, len(entries), dirs, files)
+				}
 				for _, e := range entries {
 					if e.isDir {
 						fmt.Fprintf(&sb, "  [dir] %s/\n", e.path)
@@ -263,12 +278,15 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 						fmt.Fprintf(&sb, "  %s\n", e.path)
 					}
 				}
-				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"entries": entriesSlice(entries)}}, nil
+				if truncated {
+					fmt.Fprintf(&sb, "\n(entries truncated; specify a smaller path or higher max)\n")
+				}
+				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"entries": entriesSlice(entries), "truncated": truncated}}, nil
 			},
 		},
 		"grep": {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
-				o, r, b, err := s.sessionBase(ctx, args, sessionName)
+				o, r, b, err := s.refBase(ctx, args, sessionName)
 				if err != nil {
 					return extension.ToolResultData{}, err
 				}
@@ -277,25 +295,37 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, fmt.Errorf("missing 'pattern' argument")
 				}
 				q := url.Values{"pattern": {pattern}, "ref": {b}}
+				if path := abcprotocol.ArgString(args, "path"); path != "" {
+					q.Set("path", path)
+				}
 				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/search?"+q.Encode())
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("search failed: %w", err)
 				}
 				matches := strSlice(v, "matches")
 				if len(matches) == 0 {
-					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("no matches for '%s' in branch '%s'.", b, pattern), fmt.Sprintf("在分支 '%s' 中未找到 '%s' 的匹配。", b, pattern)), Data: map[string]interface{}{"matches": []interface{}{}, "count": 0}}, nil
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("no matches for '%s' in rev '%s'.", b, pattern), fmt.Sprintf("在版本 '%s' 中未找到 '%s' 的匹配。", b, pattern)), Data: map[string]interface{}{"matches": []interface{}{}, "count": 0}}, nil
+				}
+				max := abcprotocol.ArgInt(args, "max", 0)
+				truncated := false
+				if max > 0 && int64(len(matches)) > max {
+					matches = matches[:max]
+					truncated = true
 				}
 				var sb strings.Builder
 				fmt.Fprintf(&sb, "found %d match(es):\n", len(matches))
 				for _, m := range matches {
 					fmt.Fprintf(&sb, "  %s\n", m)
 				}
+				if truncated {
+					fmt.Fprintf(&sb, "\n(results truncated; narrow the pattern or path)\n")
+				}
 				parsed := make([]interface{}, 0, len(matches))
 				for _, m := range matches {
 					path, line, text := splitMatch(m)
 					parsed = append(parsed, map[string]interface{}{"path": path, "line": line, "text": text})
 				}
-				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"matches": parsed, "count": len(matches)}}, nil
+				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"matches": parsed, "count": len(matches), "truncated": truncated}}, nil
 			},
 		},
 		"explore": {
@@ -306,11 +336,15 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				orgArg := abcprotocol.ArgString(args, "org")
 				repoArg := abcprotocol.ArgString(args, "repo")
+				keyword := abcprotocol.ArgString(args, "keyword")
 
 				var sb strings.Builder
 				meta := []interface{}{}
 				for org, repos := range tree {
 					if orgArg != "" && org != orgArg {
+						continue
+					}
+					if keyword != "" && !strings.Contains(org, keyword) {
 						continue
 					}
 					fmt.Fprintf(&sb, "organization '%s' (%d repo(s)):\n", org, len(repos))
@@ -319,8 +353,11 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 						if repoArg != "" && repo != repoArg {
 							continue
 						}
-						fmt.Fprintf(&sb, "  - %s (branches: %s)\n", repo, strings.Join(bms, ", "))
-						rmeta = append(rmeta, map[string]interface{}{"repo": repo, "branches": bms})
+						if keyword != "" && !strings.Contains(repo, keyword) {
+							continue
+						}
+						fmt.Fprintf(&sb, "  - %s (bookmarks: %s)\n", repo, bookmarkTargets(bms))
+						rmeta = append(rmeta, map[string]interface{}{"repo": repo, "bookmarks": bookmarkMeta(bms)})
 					}
 					meta = append(meta, map[string]interface{}{"org": org, "repos": rmeta})
 				}
@@ -328,6 +365,46 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, "no organizations or repositories.", "没有组织或仓库。"), Data: map[string]interface{}{"orgs": []interface{}{}}}, nil
 				}
 				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"orgs": meta}}, nil
+			},
+		},
+		"git-graph": {
+			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
+				o, r, _, err := s.refBase(ctx, args, sessionName)
+				if err != nil {
+					return extension.ToolResultData{}, err
+				}
+				limit := abcprotocol.ArgInt(args, "limit", 0)
+				q := url.Values{}
+				if limit > 0 {
+					q.Set("limit", fmt.Sprintf("%d", limit))
+				}
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/graph?"+q.Encode())
+				if err != nil {
+					return extension.ToolResultData{}, fmt.Errorf("failed to get graph: %w", err)
+				}
+				arr, _ := v["graph"].([]interface{})
+				if len(arr) == 0 {
+					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, "no commits in graph.", "图中无提交。"), Data: map[string]interface{}{"graph": []interface{}{}}}, nil
+				}
+				var sb strings.Builder
+				fmt.Fprintf(&sb, "commit graph (%d nodes):\n", len(arr))
+				meta := make([]interface{}, 0, len(arr))
+				for _, e := range arr {
+					m, _ := e.(map[string]interface{})
+					isHead, _ := m["is_head"].(bool)
+					head := ""
+					if isHead {
+						head = " [HEAD]"
+					}
+					commit := strFrom(m, "commit_id")
+					fmt.Fprintf(&sb, "  %s %s%s\n", shortID(commit), strFrom(m, "message"), head)
+					meta = append(meta, map[string]interface{}{
+						"commit_id": commit, "change_id": strFrom(m, "change_id"),
+						"message": strFrom(m, "message"), "author": strFrom(m, "author"),
+						"parents": m["parents"], "is_head": isHead,
+					})
+				}
+				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"graph": meta}}, nil
 			},
 		},
 		"git-diff": {
@@ -470,7 +547,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if rev := abcprotocol.ArgString(args, "rev"); rev != "" {
 					q.Set("sha", rev)
 				} else {
-					if b := abcprotocol.ArgString(args, "_branch"); b != "" {
+					if b := abcprotocol.ArgString(args, "_bookmark"); b != "" {
 						q.Set("sha", b)
 					}
 				}
@@ -523,30 +600,6 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("changes of '%s':\n%s", rev, patch), fmt.Sprintf("'%s' 的变更：\n%s", rev, patch)), Data: map[string]interface{}{"rev": rev, "patch": patch}}, nil
 			},
 		},
-		"git-branches": {
-			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
-				o, r, _, err := s.sessionBase(ctx, args, sessionName)
-				if err != nil {
-					return extension.ToolResultData{}, err
-				}
-				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/branches")
-				if err != nil {
-					return extension.ToolResultData{}, fmt.Errorf("failed to list branches: %w", err)
-				}
-				branches := toBranches(v)
-				var sb strings.Builder
-				if len(branches) == 0 {
-					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, "no branches.", "无分支。"), Data: map[string]interface{}{"branches": []interface{}{}}}, nil
-				}
-				fmt.Fprintf(&sb, "branches (%d):\n", len(branches))
-				meta := make([]interface{}, 0, len(branches))
-				for _, br := range branches {
-					fmt.Fprintf(&sb, "  %s（%s）\n", br.branch, shortID(br.target))
-					meta = append(meta, map[string]interface{}{"branch": br.branch, "target": br.target})
-				}
-				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"branches": meta}}, nil
-			},
-		},
 		"mr-create": {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
 				o, r, b, err := s.sessionBase(ctx, args, sessionName)
@@ -558,7 +611,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, fmt.Errorf("missing 'target' argument")
 				}
 				if target == b {
-					return extension.ToolResultData{}, fmt.Errorf("target must differ from the current branch '%s'", b)
+					return extension.ToolResultData{}, fmt.Errorf("target must differ from the current bookmark '%s'", b)
 				}
 				title := abcprotocol.ArgString(args, "title")
 				if title == "" {
@@ -616,7 +669,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					m, _ := e.(map[string]interface{})
 					meta = append(meta, m)
 					fmt.Fprintf(&sb, "  #%v  %s → %s  [%s]  %v\n",
-						m["number"], m["head_branch"], m["base"], m["state"], m["title"])
+						m["number"], m["head_bookmark"], m["base"], m["state"], m["title"])
 				}
 				return extension.ToolResultData{Content: sb.String(), Data: map[string]interface{}{"mrs": meta}}, nil
 			},
@@ -637,7 +690,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				var sb strings.Builder
 				fmt.Fprintf(&sb, "MR #%v  %s\n  state: %s  review: %s\n  head: %s → base: %s\n  title: %v\n\n",
-					mr["number"], mr["state"], mr["state"], mr["review_state"], mr["head_branch"], mr["base"], mr["title"])
+					mr["number"], mr["state"], mr["state"], mr["review_state"], mr["head_bookmark"], mr["base"], mr["title"])
 				// Diff (bounded).
 				if diff, derr := s.jj.MrDiff(ctx, o, r, number); derr == nil {
 					text := fmt.Sprintf("%v", diff)
@@ -687,7 +740,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				// learns the verdict — approved = soon merging, rejected =
 				// address the feedback. Self-reviews stay silent.
 				if mr, gerr := s.jj.GetMr(ctx, o, r, number); gerr == nil {
-					if head, _ := mr["head_branch"].(string); head != "" {
+					if head, _ := mr["head_bookmark"].(string); head != "" {
 						if headSession := namingSession(o, r, head); headSession != sessionName {
 							var noteEn, noteZh string
 							if state == "approved" {
@@ -726,7 +779,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if state, _ := mr["state"].(string); state != "open" {
 					return extension.ToolResultData{}, fmt.Errorf("merge request #%d is %s (only open MRs can merge)", number, state)
 				}
-				head, _ := mr["head_branch"].(string)
+				head, _ := mr["head_bookmark"].(string)
 				base, _ := mr["base"].(string)
 				headSha, _ := mr["head_sha"].(string)
 				if headSha == "" {
@@ -784,7 +837,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, fmt.Errorf("missing 'bookmark' argument")
 				}
 				if newBM == b {
-					return extension.ToolResultData{}, fmt.Errorf("bookmark must differ from the current branch '%s'", b)
+					return extension.ToolResultData{}, fmt.Errorf("bookmark must differ from the current bookmark '%s'", b)
 				}
 				quest := abcprotocol.ArgString(args, "quest")
 				if quest == "" {
@@ -801,7 +854,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				baseRev, berr := s.jj.GetBookmarkHead(ctx, o, r, b)
 				if berr != nil {
-					return extension.ToolResultData{}, fmt.Errorf("failed to resolve branch head: %w", berr)
+					return extension.ToolResultData{}, fmt.Errorf("failed to resolve bookmark head: %w", berr)
 				}
 				if err := s.publishWorksheet(ctx, sessionName, "fork-bookmark", map[string]interface{}{
 					"bookmark": newBM, "quest": quest, "parent": b,
@@ -829,7 +882,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, fmt.Errorf("refusing to delete this session's own bookmark '%s'", bm)
 				}
 				if bm == "main" {
-					return extension.ToolResultData{}, fmt.Errorf("refusing to delete the default branch 'main'")
+					return extension.ToolResultData{}, fmt.Errorf("refusing to delete the default bookmark 'main'")
 				}
 				tree, err := s.jj.GetRepoTree(ctx)
 				if err != nil {
@@ -872,14 +925,46 @@ func (s *server) sessionBase(ctx context.Context, args map[string]interface{}, s
 	if sessionName != "" {
 		return s.resolveSession(ctx, sessionName)
 	}
-	o, r, b := abcprotocol.ArgString(args, "_org"), abcprotocol.ArgString(args, "_repo"), abcprotocol.ArgString(args, "_branch")
+	o, r, b := abcprotocol.ArgString(args, "_org"), abcprotocol.ArgString(args, "_repo"), abcprotocol.ArgString(args, "_bookmark")
 	if o == "" || r == "" {
 		return "", "", "", fmt.Errorf("missing session context (session_name or _org/_repo)")
 	}
 	return o, r, b, nil
 }
 
-// sessionBaseXO is sessionBase with an explicit `org`/`repo`/`branch` override
+// refBase resolves a `ref` argument into (org, repo, rev). `ref` is a full
+// `org:repo:<rev>` path (never a bare bookmark/rev name) — the rev segment is
+// passed verbatim to jjlab, whose resolve_snapshot interprets it as a
+// bookmark, commit hash, tag or change-id. Absent/empty `ref` defaults to the
+// current workspace's (org, repo, bookmark); a `ref` that does not include an
+// org:repo prefix is rejected (a bare `<rev>` cannot locate a repo).
+func (s *server) refBase(ctx context.Context, args map[string]interface{}, sessionName string) (string, string, string, error) {
+	ref := abcprotocol.ArgString(args, "ref")
+	if ref == "" {
+		// Default: current workspace (org:repo:bookmark).
+		if sessionName != "" {
+			return s.resolveSession(ctx, sessionName)
+		}
+		o, r, b := abcprotocol.ArgString(args, "_org"), abcprotocol.ArgString(args, "_repo"), abcprotocol.ArgString(args, "_bookmark")
+		if o == "" || r == "" {
+			return "", "", "", fmt.Errorf("missing session context (session_name or _org/_repo)")
+		}
+		return o, r, b, nil
+	}
+	// Split org:repo:rev — rev may itself contain ':' (change-id, or a path
+	// like feat/x), so split on the FIRST two colons only.
+	parts := strings.SplitN(ref, ":", 3)
+	if len(parts) != 3 {
+		return "", "", "", fmt.Errorf("ref must be a full 'org:repo:<rev>' path (got %q)", ref)
+	}
+	org, repo, rev := parts[0], parts[1], parts[2]
+	if org == "" || repo == "" || rev == "" {
+		return "", "", "", fmt.Errorf("ref must be a full 'org:repo:<rev>' path (got %q)", ref)
+	}
+	return org, repo, rev, nil
+}
+
+// sessionBaseXO is sessionBase with an explicit `org`/`repo`/`bookmark` override
 // (read-only cross-repo access); the bookmark still defaults to the workspace.
 func (s *server) sessionBaseXO(ctx context.Context, args map[string]interface{}, sessionName string) (string, string, string, error) {
 	o, r, b, err := s.sessionBase(ctx, args, sessionName)
@@ -892,9 +977,7 @@ func (s *server) sessionBaseXO(ctx context.Context, args map[string]interface{},
 	if arg := abcprotocol.ArgString(args, "repo"); arg != "" {
 		r = arg
 	}
-	if arg := abcprotocol.ArgString(args, "branch"); arg != "" {
-		b = arg
-	} else if arg := abcprotocol.ArgString(args, "bookmark"); arg != "" {
+	if arg := abcprotocol.ArgString(args, "bookmark"); arg != "" {
 		b = arg
 	}
 	return o, r, b, nil
@@ -1033,8 +1116,23 @@ type entry struct {
 	size  int64
 }
 
+// pathWithSlash normalizes a path argument into a leading-slash segment for
+// the /contents/{path} subpath ("" -> "").
+func pathWithSlash(path string) string {
+	if path == "" {
+		return ""
+	}
+	if !strings.HasPrefix(path, "/") {
+		return "/" + path
+	}
+	return path
+}
+
 func toEntries(v map[string]interface{}) []entry {
 	arr, ok := v["tree"].([]interface{})
+	if !ok {
+		arr, ok = v["entries"].([]interface{})
+	}
 	if !ok {
 		return nil
 	}
@@ -1046,8 +1144,19 @@ func toEntries(v map[string]interface{}) []entry {
 		}
 		p, _ := m["path"].(string)
 		isDir := false
-		if k, _ := m["kind"].(string); k == "tree" {
+		switch k := m["kind"].(string); k {
+		case "tree":
 			isDir = true
+		case "dir":
+			isDir = true
+		}
+		if t, _ := m["type"].(string); t == "tree" || t == "dir" {
+			isDir = true
+		}
+		if p == "" {
+			if n, _ := m["name"].(string); n != "" {
+				p = n
+			}
 		}
 		var size int64
 		if s, ok := m["size"].(float64); ok {
@@ -1096,26 +1205,20 @@ func toCommits(v map[string]interface{}) []commitInfo {
 	return out
 }
 
-type branchInfo struct {
-	branch string
-	target string
+// bookmarkTargets renders a repo's bookmarks as "name(target)" joined for text.
+func bookmarkTargets(bms []bookmarkInfo) string {
+	parts := make([]string, 0, len(bms))
+	for _, b := range bms {
+		parts = append(parts, fmt.Sprintf("%s(%s)", b.Name, shortID(b.Sha)))
+	}
+	return strings.Join(parts, ", ")
 }
 
-func toBranches(v map[string]interface{}) []branchInfo {
-	arr, ok := v["branches"].([]interface{})
-	if !ok {
-		return nil
-	}
-	out := make([]branchInfo, 0, len(arr))
-	for _, e := range arr {
-		m, ok := e.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		out = append(out, branchInfo{
-			branch: strFrom(m, "name"),
-			target: strFrom(m, "sha"),
-		})
+// bookmarkMeta converts a repo's bookmarks into a Data slice with name+target.
+func bookmarkMeta(bms []bookmarkInfo) []interface{} {
+	out := make([]interface{}, 0, len(bms))
+	for _, b := range bms {
+		out = append(out, map[string]interface{}{"bookmark": b.Name, "sha": b.Sha})
 	}
 	return out
 }

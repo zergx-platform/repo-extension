@@ -61,8 +61,8 @@ func newFakeJJ() *fakeJJ {
 				f.repos[org][repo] = []string{"main"}
 			}
 			writeTestJSON(w, 201, map[string]interface{}{"full_name": org + "/" + repo})
-		// POST /branches/{bm} {target: src}; DELETE /branches/{bm}.
-		case r.Method == http.MethodPost && len(parts) == 4 && parts[2] == "branches":
+		// POST /bookmarks/{bm} {target: src}; DELETE /bookmarks/{bm}.
+		case r.Method == http.MethodPost && len(parts) == 4 && parts[2] == "bookmarks":
 			var b map[string]interface{}
 			_ = json.NewDecoder(r.Body).Decode(&b)
 			org, repo, nb := parts[0], parts[1], parts[3]
@@ -89,7 +89,7 @@ func newFakeJJ() *fakeJJ {
 			f.anchor[org+"/"+repo+"/"+nb] = src
 			f.repos[org][repo] = append(bms, nb)
 			writeTestJSON(w, 200, map[string]interface{}{"ok": true, "sha": "hash"})
-		case r.Method == http.MethodDelete && len(parts) == 4 && parts[2] == "branches":
+		case r.Method == http.MethodDelete && len(parts) == 4 && parts[2] == "bookmarks":
 			org, repo, bm := parts[0], parts[1], parts[3]
 			f.mu.Lock()
 			defer f.mu.Unlock()
@@ -101,8 +101,8 @@ func newFakeJJ() *fakeJJ {
 			}
 			f.repos[org][repo] = out
 			writeTestJSON(w, 204, map[string]interface{}{"ok": true})
-		// GET /branches and GET /tree/{rev}.
-		case r.Method == http.MethodGet && len(parts) == 3 && parts[2] == "branches":
+		// GET /bookmarks and GET /contents?ref={rev}.
+		case r.Method == http.MethodGet && len(parts) == 3 && parts[2] == "bookmarks":
 			org, repo := parts[0], parts[1]
 			f.mu.Lock()
 			defer f.mu.Unlock()
@@ -110,9 +110,10 @@ func newFakeJJ() *fakeJJ {
 			for _, b := range f.repos[org][repo] {
 				bl = append(bl, map[string]interface{}{"name": b, "sha": "h"})
 			}
-			writeTestJSON(w, 200, map[string]interface{}{"branches": bl})
-		case r.Method == http.MethodGet && len(parts) == 4 && parts[2] == "tree":
-			org, repo, rev := parts[0], parts[1], parts[3]
+			writeTestJSON(w, 200, map[string]interface{}{"bookmarks": bl})
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/contents"):
+			org, repo := parts[0], parts[1]
+			rev := r.URL.Query().Get("ref")
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			if _, ok := f.repos[org][repo]; !ok {
@@ -120,12 +121,12 @@ func newFakeJJ() *fakeJJ {
 				return
 			}
 			if rev == "" {
-				writeTestJSON(w, 200, map[string]interface{}{"tree": []interface{}{}})
+				writeTestJSON(w, 200, map[string]interface{}{"entries": []interface{}{}})
 				return
 			}
 			for _, b := range f.repos[org][repo] {
 				if b == rev {
-					writeTestJSON(w, 200, map[string]interface{}{"tree": []interface{}{}})
+					writeTestJSON(w, 200, map[string]interface{}{"entries": []interface{}{}})
 					return
 				}
 			}
@@ -431,7 +432,7 @@ func TestResolveSessionStrict(t *testing.T) {
 		t.Fatal("non-derived name should fail")
 	}
 	// legacy args still work
-	o, r, b, err := s.sessionBase(ctx, map[string]interface{}{"_org": "x", "_repo": "y", "_branch": "z"}, "")
+	o, r, b, err := s.sessionBase(ctx, map[string]interface{}{"_org": "x", "_repo": "y", "_bookmark": "z"}, "")
 	if err != nil || o != "x" || r != "y" || b != "z" {
 		t.Fatalf("legacy base = %q %q %q %v", o, r, b, err)
 	}
