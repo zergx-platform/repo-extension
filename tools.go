@@ -246,7 +246,11 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				if path == "" {
 					endpoint = "/contents"
 				}
-				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+endpoint+"/?ref="+url.QueryEscape(b))
+				sep := "/"
+				if endpoint == "/contents" {
+					sep = ""
+				}
+				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+endpoint+sep+"?ref="+url.QueryEscape(b))
 				if err != nil {
 					return extension.ToolResultData{}, fmt.Errorf("failed to list directory: %w", err)
 				}
