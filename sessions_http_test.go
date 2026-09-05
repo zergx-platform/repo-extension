@@ -431,13 +431,12 @@ func TestResolveSessionStrict(t *testing.T) {
 	if _, _, _, err := s.resolveSession(ctx, "hi"); err == nil {
 		t.Fatal("non-derived name should fail")
 	}
-	// legacy args still work
-	o, r, b, err := s.sessionBase(ctx, map[string]interface{}{"_org": "x", "_repo": "y", "_bookmark": "z"}, "")
-	if err != nil || o != "x" || r != "y" || b != "z" {
-		t.Fatalf("legacy base = %q %q %q %v", o, r, b, err)
-	}
-	if _, _, _, err = s.sessionBase(ctx, map[string]interface{}{}, ""); err == nil {
+	// session_name is the ONLY workspace source; empty session must error.
+	if _, _, _, err := s.sessionBase(ctx, map[string]interface{}{}, ""); err == nil {
 		t.Fatal("expected error without session context")
+	}
+	if _, _, _, err := s.sessionBase(ctx, map[string]interface{}{"_org": "x", "_repo": "y", "_bookmark": "z"}, ""); err == nil {
+		t.Fatal("legacy _org/_repo/_bookmark should be rejected (session_name only)")
 	}
 }
 

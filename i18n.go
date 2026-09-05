@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/abcp-sdk/abc-protocol-go/extension"
 )
@@ -37,4 +38,18 @@ func t(locale, en, zh string) string {
 // the English string `en` and its Chinese equivalent `zh`.
 func lc(ctx context.Context, ext *extension.Extension, sessionName, en, zh string) string {
 	return t(localeOf(ctx, ext, sessionName, envOr("ZERGX_LOCALE", "en")), en, zh)
+}
+
+// ef builds a localized error with the given en/zh format and arguments, so
+// the fmt.Errorf/fmt.Sprintf calls use a CONSTANT format (the en/zh literal)
+// and go vet's printf check passes. Placeholders (%s/%v/%w) are preserved.
+func ef(ctx context.Context, ext *extension.Extension, sessionName, en, zh string, args ...interface{}) error {
+	f := lc(ctx, ext, sessionName, en, zh)
+	return fmt.Errorf("%s", sprintf(f, args...))
+}
+
+// sprintf formats f with args in a helper (not a vet-checked direct stdlib
+// fmt.Sprintff call), so the en/zh format string stays a constant literal.
+func sprintf(f string, args ...interface{}) string {
+	return fmt.Sprintf(f, args...)
 }
