@@ -64,7 +64,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					if errors.Is(err, errNotFoundForHTTP) {
 						return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("failed to read file '%s': not found or inaccessible", path), fmt.Sprintf("读取文件 '%s' 失败：未找到或不可访问", path))}, nil
 					}
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "read '%s': %v", "读取 '%s'：%v", path, err, path, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "read '%s': %v", "读取 '%s'：%v", path, err)
 				}
 				offset := abcprotocol.ArgInt(args, "offset", 1)
 				limit := abcprotocol.ArgInt(args, "limit", 0)
@@ -143,7 +143,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					{"action": "update", "path": path, "content_base64": base64.StdEncoding.EncodeToString([]byte(content)), "sha": baseSha},
 				})
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to write file: %v", "写入文件失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to write file: %v", "写入文件失败：%v", err)
 				}
 				changeID := strVal(v, "change_id")
 				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("wrote file '%s' (change %s)", path, shortID(changeID)), fmt.Sprintf("已写入文件 '%s'（变更 %s）", path, shortID(changeID))), Data: map[string]interface{}{
@@ -174,7 +174,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				body := map[string]interface{}{"action": "delete", "path": path, "sha": baseSha}
 				v, err := s.jj.commit(ctx, o, r, b, message, []map[string]interface{}{body})
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to delete file: %v", "删除文件失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to delete file: %v", "删除文件失败：%v", err)
 				}
 				changeID := strVal(v, "change_id")
 				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName, fmt.Sprintf("deleted file '%s' (change %s)", path, shortID(changeID)), fmt.Sprintf("已删除文件 '%s'（变更 %s）", path, shortID(changeID))), Data: map[string]interface{}{
@@ -219,7 +219,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					{"action": "update", "path": path, "content_base64": base64.StdEncoding.EncodeToString([]byte(newContent)), "sha": sha},
 				})
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to write edited result: %v", "写入编辑结果失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to write edited result: %v", "写入编辑结果失败：%v", err)
 				}
 				changeID := strVal(v, "change_id")
 
@@ -252,7 +252,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+endpoint+sep+"?ref="+url.QueryEscape(b))
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to list directory: %v", "列出目录失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to list directory: %v", "列出目录失败：%v", err)
 				}
 				entries := toEntries(v)
 				dirs, files := 0, 0
@@ -304,7 +304,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/search?"+q.Encode())
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "search failed: %v", "搜索失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "search failed: %v", "搜索失败：%v", err)
 				}
 				matches := strSlice(v, "matches")
 				if len(matches) == 0 {
@@ -336,7 +336,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 			Execute: func(ctx context.Context, args map[string]interface{}, callID string, sessionName string) (extension.ToolResultData, error) {
 				tree, err := s.jj.GetRepoTree(ctx)
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to browse structure: %v", "浏览结构失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to browse structure: %v", "浏览结构失败：%v", err)
 				}
 				orgArg := abcprotocol.ArgString(args, "org")
 				repoArg := abcprotocol.ArgString(args, "repo")
@@ -384,7 +384,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/graph?"+q.Encode())
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to get graph: %v", "获取图失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to get graph: %v", "获取图失败：%v", err)
 				}
 				arr, _ := v["graph"].([]interface{})
 				if len(arr) == 0 {
@@ -423,7 +423,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				q := url.Values{"base": {revA}, "head": {revB}}
 				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/compare?"+q.Encode())
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to get diff: %v", "获取差异失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to get diff: %v", "获取差异失败：%v", err)
 				}
 				diff := strVal(v, "diff")
 				scope := "tree"
@@ -450,7 +450,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				body := map[string]interface{}{"source": source, "dest": b}
 				v, err := s.jj.post(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/rebase", body)
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "rebase failed: %v", "变基失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "rebase failed: %v", "变基失败：%v", err)
 				}
 				sum, _ := v["rebase"].(map[string]interface{})
 				commitID := strVal(sum, "commit_id")
@@ -485,7 +485,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					{"action": "update", "path": path, "content_base64": base64.StdEncoding.EncodeToString([]byte(content)), "sha": baseSha},
 				})
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "resolve failed: %v", "解析失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "resolve failed: %v", "解析失败：%v", err)
 				}
 				commitID := strVal(v, "sha")
 				changeID := strVal(v, "change_id")
@@ -509,7 +509,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				q := url.Values{"rev": {rev}}
 				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/annotate/"+escPath(path)+"?"+q.Encode())
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to get blame: %v", "获取 blame 失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to get blame: %v", "获取 blame 失败：%v", err)
 				}
 				anns := arraySlice(v["annotations"])
 				var sb strings.Builder
@@ -558,7 +558,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/commits?"+q.Encode())
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to get commit history: %v", "获取提交历史失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to get commit history: %v", "获取提交历史失败：%v", err)
 				}
 				commits := toCommits(v)
 				var sb strings.Builder
@@ -590,7 +590,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				v, err := s.jj.get(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/commits/"+url.PathEscape(rev)+"/diff")
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to view change: %v", "查看变更失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to view change: %v", "查看变更失败：%v", err)
 				}
 				patch := strVal(v, "diff")
 				if strings.TrimSpace(patch) == "" {
@@ -610,7 +610,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "missing 'target' argument", "缺少 'target' 参数")
 				}
 				if target == b {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "target must differ from the current bookmark '%s'", "目标必须不同于当前书签 '%s'", b, b)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "target must differ from the current bookmark '%s'", "目标必须不同于当前书签 '%s'", b)
 				}
 				title := abcprotocol.ArgString(args, "title")
 				if title == "" {
@@ -625,7 +625,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				mr, err := s.jj.CreateMr(ctx, o, r, title, description, b, target)
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to create merge request: %v", "创建合并请求失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to create merge request: %v", "创建合并请求失败：%v", err)
 				}
 				number := toInt64(mr["number"])
 				// Notify the target session: its agent wakes, can mr-view the
@@ -653,7 +653,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				mrs, err := s.jj.ListMrs(ctx, o, r, state)
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to list merge requests: %v", "列出合并请求失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to list merge requests: %v", "列出合并请求失败：%v", err)
 				}
 				if len(mrs) == 0 {
 					return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName,
@@ -685,7 +685,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				mr, err := s.jj.GetMr(ctx, o, r, number)
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to fetch merge request #%d: %v", "获取合并请求 #%d：%v", number, err, number, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to fetch merge request #%d: %v", "获取合并请求 #%d：%v", number, err)
 				}
 				var sb strings.Builder
 				fmt.Fprintf(&sb, "MR #%v  %s\n  state: %s  review: %s\n  head: %s → base: %s\n  title: %v\n\n",
@@ -733,7 +733,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				body := abcprotocol.ArgString(args, "body")
 				if err := s.jj.AddMrReview(ctx, o, r, number, state, body); err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to add review: %v", "添加评审失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to add review: %v", "添加评审失败：%v", err)
 				}
 				// Notify the initiator (head bookmark's session) so its agent
 				// learns the verdict — approved = soon merging, rejected =
@@ -773,7 +773,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				mr, err := s.jj.GetMr(ctx, o, r, number)
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to fetch merge request #%d: %v", "获取合并请求 #%d：%v", number, err, number, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to fetch merge request #%d: %v", "获取合并请求 #%d：%v", number, err)
 				}
 				if state, _ := mr["state"].(string); state != "open" {
 					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "merge request #%d is %s (only open MRs can merge)", "合并请求 #%d 状态为 %s（仅允许合并打开的 MR）", number, state, number, state)
@@ -798,7 +798,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				v, err := s.jj.post(ctx, "/api/v1/repos/"+url.PathEscape(o)+"/"+url.PathEscape(r)+"/rebase",
 					map[string]interface{}{"source": headSha, "dest": base})
 				if err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "merge failed: %v", "合并失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "merge failed: %v", "合并失败：%v", err)
 				}
 				sum, _ := v["rebase"].(map[string]interface{})
 				conflicts := strSlice(sum, "conflicts")
@@ -810,7 +810,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				_ = s.jj.AddMrReview(ctx, o, r, number, "approved", "merged by zergx agent")
 				if err := s.jj.UpdateMrState(ctx, o, r, number, "merged"); err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "merged but failed to update MR state: %v", "已合并但更新 MR 状态失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "merged but failed to update MR state: %v", "已合并但更新 MR 状态失败：%v", err)
 				}
 				// Tell the source session its work landed.
 				headSession := namingSession(o, r, head)
@@ -836,7 +836,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "missing 'bookmark' argument", "缺少 'bookmark' 参数")
 				}
 				if newBM == b {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "bookmark must differ from the current bookmark '%s'", "书签必须不同于当前书签 '%s'", b, b)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "bookmark must differ from the current bookmark '%s'", "书签必须不同于当前书签 '%s'", b)
 				}
 				quest := abcprotocol.ArgString(args, "quest")
 				if quest == "" {
@@ -853,13 +853,13 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 				}
 				baseRev, berr := s.jj.GetBookmarkHead(ctx, o, r, b)
 				if berr != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to resolve bookmark head: %v", "解析书签头失败：%v", berr, berr)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to resolve bookmark head: %v", "解析书签头失败：%v", berr)
 				}
 				if err := s.publishWorksheet(ctx, sessionName, "fork-bookmark", map[string]interface{}{
 					"bookmark": newBM, "quest": quest, "parent": b,
 					"fork_tip": forkTip, "base_rev": baseRev,
 				}, callID); err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to publish worksheet: %v", "发布工单失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to publish worksheet: %v", "发布工单失败：%v", err)
 				}
 				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName,
 					fmt.Sprintf("worksheet published: fork to '%s' (awaiting user approval)", newBM),
@@ -878,7 +878,7 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "missing 'bookmark' argument", "缺少 'bookmark' 参数")
 				}
 				if bm == b {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "refusing to delete this session's own bookmark '%s'", "拒绝删除本会话自己的书签 '%s'", bm, bm)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "refusing to delete this session's own bookmark '%s'", "拒绝删除本会话自己的书签 '%s'", bm)
 				}
 				if bm == "main" {
 					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "refusing to delete the default bookmark 'main'", "拒绝删除默认书签 'main'")
@@ -888,13 +888,13 @@ func (s *server) handlers() map[string]extension.ToolSpec {
 					return extension.ToolResultData{}, err
 				}
 				if !tree.bookmarkExists(o, r, bm) {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "bookmark '%s' does not exist", "书签 '%s' 不存在", bm, bm)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "bookmark '%s' does not exist", "书签 '%s' 不存在", bm)
 				}
 				target := namingSession(o, r, bm)
 				if err := s.publishWorksheet(ctx, sessionName, "delete-bookmark", map[string]interface{}{
 					"bookmark": bm, "session": target,
 				}, callID); err != nil {
-					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to publish worksheet: %v", "发布工单失败：%v", err, err)
+					return extension.ToolResultData{}, ef(ctx, s.ext, sessionName, "failed to publish worksheet: %v", "发布工单失败：%v", err)
 				}
 				return extension.ToolResultData{Content: lc(ctx, s.ext, sessionName,
 					fmt.Sprintf("worksheet published: delete bookmark '%s' and its session (awaiting user approval)", bm),
