@@ -152,7 +152,7 @@ func execForkRequest(ctx context.Context, s *server, session string, args map[st
 	if err := s.ensureForkedAt(ctx, org, repo, newBM, newSession, baseRev, parentBM); err != nil {
 		return "", "", err
 	}
-	if err := s.ag.ForkSession(ctx, session, newSession, forkTip); err != nil {
+	if err := s.ag.ForkSession(ctx, session, newSession, forkTip, "build"); err != nil {
 		return "", "", err
 	}
 

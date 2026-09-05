@@ -114,11 +114,17 @@ func (c *agentClient) GetSession(ctx context.Context, name string) (map[string]i
 
 // ForkSession forks parentSID into a new session named `name`. The optional
 // messageID pins the fork to a specific message on the parent's chain (empty
-// forks from the current tip). 409 (already exists) is idempotent success.
-func (c *agentClient) ForkSession(ctx context.Context, parentSID, name, messageID string) error {
+// forks from the current tip); `preset` overrides the forked session's role
+// (the fork-bookmark worksheet passes "build" so a work-branch sub-agent can
+// edit/build; a manual fork inherits the parent's preset). 409 (already
+// exists) is idempotent success.
+func (c *agentClient) ForkSession(ctx context.Context, parentSID, name, messageID, preset string) error {
 	body := map[string]interface{}{"name": name}
 	if messageID != "" {
 		body["message_id"] = messageID
+	}
+	if preset != "" {
+		body["preset"] = preset
 	}
 	status, v, err := c.call(ctx, http.MethodPost, sessionsPath(parentSID)+"/fork", body)
 	if err != nil {
